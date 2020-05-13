@@ -1,6 +1,7 @@
 # Userdefined
-models/*
+models/
 *.pth
+*.csv
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
