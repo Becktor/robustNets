@@ -140,19 +140,19 @@ def main(args=None):
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
-            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.7)
+            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.5)
 
         scheduler.step(np.mean(epoch_loss))
 
-        writer.add_scalar("train/running_loss:", np.mean(loss_hist), epoch_num)
-        writer.add_scalar("val/Buoy_mAP:", rl[2][1], epoch_num)
-        writer.add_scalar("val/Boat_mAP:", rl[3][1], epoch_num)
+        writer.add_scalar("train/running_loss:", np.mean(loss_hist), curr_epoch)
+        writer.add_scalar("val/Buoy_mAP:", rl[2][1], curr_epoch)
+        writer.add_scalar("val/Boat_mAP:", rl[3][1], curr_epoch)
 
-        writer.add_scalar("val/Buoy_Precision:", rl[0][2], epoch_num)
-        writer.add_scalar("val/Buoy_Recall:", rl[0][1], epoch_num)
+        writer.add_scalar("val/Buoy_Precision:", rl[0][2], curr_epoch)
+        writer.add_scalar("val/Buoy_Recall:", rl[0][1], curr_epoch)
 
-        writer.add_scalar("val/Boat_Precision:", rl[1][2], epoch_num)
-        writer.add_scalar("val/Boat_Recall:", rl[1][1], epoch_num)
+        writer.add_scalar("val/Boat_Precision:", rl[1][2], curr_epoch)
+        writer.add_scalar("val/Boat_Recall:", rl[1][1], curr_epoch)
 
         checkpoint = {
             'epoch': curr_epoch + 1,
@@ -162,7 +162,7 @@ def main(args=None):
             'boat_mAP': rl[3][1]
         }
 
-        if rl[2][1] > boat_mAP and rl[3][1] > buoy_mAP:
+        if rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP:
             boat_mAP = rl[3][1]
             buoy_mAP = rl[2][1]
             save_ckp(checkpoint, True, checkpoint_dir, curr_epoch)
