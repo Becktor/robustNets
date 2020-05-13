@@ -1,5 +1,5 @@
 # Userdefined
-models/
+trained_models/
 *.pth
 *.csv
 # Byte-compiled / optimized / DLL files

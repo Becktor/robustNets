@@ -81,7 +81,7 @@ def main(args=None):
     retinanet = torch.nn.DataParallel(retinanet).cuda()
     optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
 
-    checkpoint_dir = 'models/retinanet' + dt.datetime.now().strftime("%j_%H%M")
+    checkpoint_dir = 'layers/retinanet' + dt.datetime.now().strftime("%j_%H%M")
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
     if parser.continue_training is not None:
