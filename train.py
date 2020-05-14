@@ -81,7 +81,7 @@ def main(args=None):
     retinanet = torch.nn.DataParallel(retinanet).cuda()
     optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
 
-    checkpoint_dir = 'layers/retinanet' + dt.datetime.now().strftime("%j_%H%M")
+    checkpoint_dir = os.path.join('trained_models', 'retinanet') + dt.datetime.now().strftime("%j_%H%M")
     if not os.path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir)
     if parser.continue_training is not None:
@@ -144,15 +144,15 @@ def main(args=None):
 
         scheduler.step(np.mean(epoch_loss))
 
-        writer.add_scalar("train/running_loss:", np.mean(loss_hist), curr_epoch)
-        writer.add_scalar("val/Buoy_mAP:", rl[2][1], curr_epoch)
-        writer.add_scalar("val/Boat_mAP:", rl[3][1], curr_epoch)
+        writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
+        writer.add_scalar("val/mAP_Buoy", rl[2][1], curr_epoch)
+        writer.add_scalar("val/mAP_Boat", rl[3][1], curr_epoch)
 
-        writer.add_scalar("val/Buoy_Precision:", rl[0][2], curr_epoch)
-        writer.add_scalar("val/Buoy_Recall:", rl[0][1], curr_epoch)
+        writer.add_scalar("val/Buoy_Precision", rl[0][2], curr_epoch)
+        writer.add_scalar("val/Buoy_Recall", rl[0][1], curr_epoch)
 
-        writer.add_scalar("val/Boat_Precision:", rl[1][2], curr_epoch)
-        writer.add_scalar("val/Boat_Recall:", rl[1][1], curr_epoch)
+        writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
+        writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
 
         checkpoint = {
             'epoch': curr_epoch + 1,
@@ -169,7 +169,7 @@ def main(args=None):
         else:
             save_ckp(checkpoint, False, checkpoint_dir, curr_epoch)
 
-        loss_file = open(checkpoint_dir + r"\loss.csv", "a+")
+        loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
         loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
                                                                   rl[0], rl[1], rl[2], rl[3], buoy_mAP, boat_mAP))
         loss_file.close()
