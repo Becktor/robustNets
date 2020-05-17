@@ -38,6 +38,7 @@ def main(args=None):
     parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
+    parser.add_argument('--pretrained',help='resnet base pretrained or not',type=bool, default=True)
 
     parser = parser.parse_args(args)
 
@@ -58,17 +59,20 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
 
+    pretrained = False
+    if parser.pretrained:
+        pretrained = False
     # Create the model
     if parser.depth == 18:
-        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 34:
-        retinanet = model.resnet34(nm_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet34(nm_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 50:
-        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 101:
-        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 152:
-        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=True)
+        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 
@@ -80,16 +84,18 @@ def main(args=None):
     buoy_mAP = 0
     retinanet = torch.nn.DataParallel(retinanet).cuda()
     optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
-
     checkpoint_dir = os.path.join('trained_models', 'retinanet') + dt.datetime.now().strftime("%j_%H%M")
-    if not os.path.exists(checkpoint_dir):
-        os.makedirs(checkpoint_dir)
+
     if parser.continue_training is not None:
         retinanet, optimizer, checkpoint_dict = load_ckp(parser.continue_training, retinanet, optimizer)
         checkpoint_dir = parser.continue_training
         prev_epoch = checkpoint_dict['epoch']
         boat_mAP = checkpoint_dict['boat_mAP']
         buoy_mAP = checkpoint_dict['buoy_mAP']
+    else:
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
     writer = SummaryWriter(checkpoint_dir + "/tb_event")
     retinanet.training = True
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
@@ -104,7 +110,6 @@ def main(args=None):
         curr_epoch = prev_epoch + epoch_num
         retinanet.train()
         retinanet.module.freeze_bn()
-
         epoch_loss = []
 
         for iter_num, data in enumerate(dataloader_train):

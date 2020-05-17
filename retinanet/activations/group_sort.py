@@ -1,5 +1,6 @@
 import numpy as np
 import torch.nn as nn
+import torch
 
 
 class GroupSort(nn.Module):
@@ -10,9 +11,11 @@ class GroupSort(nn.Module):
         self.axis = axis
 
     def forward(self, x):
+        prev_shape = x.shape
+        x = torch.flatten(x, start_dim=2)
         group_sorted = group_sort(x, self.num_units, self.axis)
         assert check_group_sorted(group_sorted, self.num_units, axis=self.axis) == 1, "GroupSort failed. "
-
+        group_sorted = torch.reshape(group_sorted, prev_shape)
         return group_sorted
 
     def extra_repr(self):
@@ -48,10 +51,10 @@ def check_group_sorted(x, num_units, axis=-1):
 
     x_np = x.cpu().data.numpy()
     x_np = x_np.reshape(*size)
-    x_np_diff = np.diff(x_np, axis=axis)
+    x_np_diff = np.diff(x_np, axis=2)
 
     # Return 1 iff all elements are increasing.
-    if np.sum(x_np_diff < 0) < 0:
+    if np.sum(x_np_diff < 0) > 0:
         return 0
     else:
         return 1

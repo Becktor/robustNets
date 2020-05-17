@@ -239,5 +239,5 @@ def evaluate(
         label_name = generator.label_to_name(label)
         print('{}: {}'.format(label_name, average_precisions[label][0]))
         return_list.append((label_name, average_precisions[label][0]))
-
+    print('')
     return average_precisions, return_list
