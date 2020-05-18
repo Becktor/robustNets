@@ -152,7 +152,7 @@ class ClassificationModel(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, num_classes, block, layers, act=GroupSort(4, axis=1)):
+    def __init__(self, num_classes, block, layers, act=GroupSort(8, axis=1)):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)

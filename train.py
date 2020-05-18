@@ -8,7 +8,6 @@ import os
 
 if os.name == 'nt':
     import ctypes
-
     ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
 
 import torch.optim as optim
@@ -61,12 +60,12 @@ def main(args=None):
 
     pretrained = False
     if parser.pretrained:
-        pretrained = False
+        pretrained = True
     # Create the model
     if parser.depth == 18:
         retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 34:
-        retinanet = model.resnet34(nm_classes=dataset_train.num_classes(), pretrained=pretrained)
+        retinanet = model.resnet34(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 50:
         retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pretrained)
     elif parser.depth == 101:
@@ -145,7 +144,7 @@ def main(args=None):
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
-            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.5)
+            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.3)
 
         scheduler.step(np.mean(epoch_loss))
 
