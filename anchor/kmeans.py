@@ -1,11 +1,10 @@
-from sklearn.cluster import KMeans, MiniBatchKMeans
-import numpy as np
-import csv
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import argparse
+
+import matplotlib.image as mpimg
+import numpy as np
 import pandas as pd
 from etaprogress.progress import ProgressBar
+from sklearn.cluster import KMeans
 
 np.set_printoptions(suppress=True)
 

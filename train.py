@@ -1,14 +1,14 @@
 import argparse
 import collections
 import datetime as dt
-import numpy as np
-
-import torch
 import os
 
-if os.name == 'nt':
-    import ctypes
-    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
+import numpy as np
+
+#if os.name == 'nt':
+    #import ctypes
+    #ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
+
 
 import torch.optim as optim
 from torchvision import transforms

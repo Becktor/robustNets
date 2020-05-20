@@ -1,15 +1,9 @@
-import numpy as np
-import torchvision
-import time
-import os
-import copy
-import pdb
-import time
 import argparse
+import os
+import time
 
-import sys
 import cv2
-
+import numpy as np
 import torch
 
 if os.name == 'nt':
@@ -17,11 +11,10 @@ if os.name == 'nt':
 
     ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
 from retinanet import model
-from torch.utils.data import Dataset, DataLoader
-from torchvision import datasets, models, transforms
+from torch.utils.data import DataLoader
+from torchvision import transforms
 
-from retinanet.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
-    UnNormalizer, Normalizer
+from retinanet.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, UnNormalizer, Normalizer
 
 assert torch.__version__.split('.')[0] == '1'
 

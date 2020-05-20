@@ -1,6 +1,6 @@
-import time
 import os
 import subprocess
+import time
 
 for i in range(4):
     x = 'bsub < robust_net.sh'

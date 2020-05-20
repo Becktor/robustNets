@@ -1,14 +1,14 @@
-import torch.nn as nn
-import torch
 import math
+
+import torch
+import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-from torch.nn import Conv2d
 from torchvision.ops import nms
-from retinanet.utils import BasicBlock, GroupBlock, Bottleneck, Bottleneck_groupsort, BBoxTransform, ClipBoxes
-from retinanet.layers.bjork_conv2d import BjorckConv2d
+
+from retinanet import losses
 from retinanet.activations import *
 from retinanet.anchors import Anchors
-from retinanet import losses
+from retinanet.utils import BasicBlock, GroupBlock, Bottleneck, Bottleneck_groupsort, BBoxTransform, ClipBoxes
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',

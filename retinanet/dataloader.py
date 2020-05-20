@@ -1,22 +1,20 @@
 from __future__ import print_function, division
-import sys
-import os
-import torch
-import numpy as np
-import random
+
 import csv
-from future.utils import raise_from
+import os
+import random
+import sys
 
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
-from torch.utils.data.sampler import Sampler
-
+import numpy as np
+import skimage
+import skimage.color
 import skimage.io
 import skimage.transform
-import skimage.color
-import skimage
-
+import torch
 from PIL import Image
+from future.utils import raise_from
+from torch.utils.data import Dataset
+from torch.utils.data.sampler import Sampler
 
 
 class CSVDataset(Dataset):

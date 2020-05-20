@@ -1,5 +1,5 @@
-from torch.nn.modules.utils import _pair
 import torch.nn.functional as F
+from torch.nn.modules.utils import _pair
 
 from retinanet.layers.base_conv2d import BaseConv2D
 from retinanet.utils.math.projections import bjorck_orthonormalize, get_safe_bjorck_scaling

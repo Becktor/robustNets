@@ -1,6 +1,7 @@
-from pycocotools.cocoeval import COCOeval
 import json
+
 import torch
+from pycocotools.cocoeval import COCOeval
 
 
 def evaluate_coco(dataset, model, threshold=0.05):
