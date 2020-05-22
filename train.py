@@ -32,12 +32,12 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
-    parser.add_argument('--depth', help='Resnet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
+    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
-    parser.add_argument('--pretrained',help='resnet base pretrained or not',type=bool, default=True)
+    parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
 
     parser = parser.parse_args(args)
 
@@ -58,20 +58,20 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
 
-    pretrained = False
-    if parser.pretrained:
-        pretrained = True
+    pre_trained = False
+    if parser.pre_trained:
+        pre_trained = True
     # Create the model
     if parser.depth == 18:
-        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=pretrained)
+        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
-        retinanet = model.resnet34(num_classes=dataset_train.num_classes(), pretrained=pretrained)
+        retinanet = model.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
-        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pretrained)
+        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 101:
-        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=pretrained)
+        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
-        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=pretrained)
+        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 
@@ -122,9 +122,7 @@ def main(args=None):
                     continue
 
                 loss.backward()
-
                 torch.nn.utils.clip_grad_norm_(retinanet.parameters(), 0.1)
-
                 optimizer.step()
 
                 loss_hist.append(float(loss))
@@ -144,7 +142,7 @@ def main(args=None):
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
-            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.3)
+            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.1)
 
         scheduler.step(np.mean(epoch_loss))
 

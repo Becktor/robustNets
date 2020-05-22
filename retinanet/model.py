@@ -3,6 +3,8 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
+from torch import Tensor
+from torch.nn import Conv2d
 from torchvision.ops import nms
 
 from retinanet import losses
@@ -152,7 +154,7 @@ class ClassificationModel(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, num_classes, block, layers, act=GroupSort(8, axis=1)):
+    def __init__(self, num_classes, block, layers, act=GroupSort(2, axis=1)):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
