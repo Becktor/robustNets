@@ -10,6 +10,7 @@ from torchvision.ops import nms
 from retinanet import losses
 from retinanet.activations import *
 from retinanet.anchors import Anchors
+from retinanet.layers.bjork_conv2d import BjorckConv2d
 from retinanet.utils import BasicBlock, GroupBlock, Bottleneck, Bottleneck_groupsort, BBoxTransform, ClipBoxes
 
 model_urls = {
@@ -22,30 +23,30 @@ model_urls = {
 
 
 class PyramidFeatures(nn.Module):
-    def __init__(self, C3_size, C4_size, C5_size, feature_size=256):
+    def __init__(self, C3_size, C4_size, C5_size, feature_size=256, act=nn.ReLU, conv=nn.Conv2d):
         super(PyramidFeatures, self).__init__()
 
         # upsample C5 to get P5 from the FPN paper
 
-        self.P5_1 = nn.Conv2d(C5_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P5_1 = conv(C5_size, feature_size, kernel_size=1, stride=1, padding=0)
         self.P5_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
-        self.P5_2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.P5_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
 
         # add P5 elementwise to C4
-        self.P4_1 = nn.Conv2d(C4_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P4_1 = conv(C4_size, feature_size, kernel_size=1, stride=1, padding=0)
         self.P4_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
-        self.P4_2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.P4_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
 
         # add P4 elementwise to C3
-        self.P3_1 = nn.Conv2d(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P3_2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.P3_1 = conv(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P3_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
 
         # "P6 is obtained via a 3x3 stride-2 conv on C5"
-        self.P6 = nn.Conv2d(C5_size, feature_size, kernel_size=3, stride=2, padding=1)
+        self.P6 = conv(C5_size, feature_size, kernel_size=3, stride=2, padding=1)
 
         # "P7 is computed by applying ReLU followed by a 3x3 stride-2 conv on P6"
-        self.P7_1 = nn.ReLU()  # GroupSort(2,axis=1)
-        self.P7_2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=2, padding=1)
+        self.P7_1 = act  # GroupSort(2,axis=1)
+        self.P7_2 = conv(feature_size, feature_size, kernel_size=3, stride=2, padding=1)
 
     def forward(self, inputs):
         C3, C4, C5 = inputs
@@ -72,23 +73,22 @@ class PyramidFeatures(nn.Module):
 
 
 class RegressionModel(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, feature_size=256, act=nn.ReLU):
+    def __init__(self, num_features_in, num_anchors=9, feature_size=256, act=nn.ReLU, conv=nn.Conv2d):
         super(RegressionModel, self).__init__()
 
-        self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
         self.act1 = act
 
-        self.conv2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
         self.act2 = act
 
-        self.conv3 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
         self.act3 = act
 
-        self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
-
+        self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
         self.act4 = act
 
-        self.output = nn.Conv2d(feature_size, num_anchors * 4, kernel_size=3, padding=1)
+        self.output = conv(feature_size, num_anchors * 4, kernel_size=3, padding=1)
 
     def forward(self, x):
         out = self.conv1(x)
@@ -109,26 +109,29 @@ class RegressionModel(nn.Module):
 
 class ClassificationModel(nn.Module):
 
-    def __init__(self, num_features_in, num_anchors=9, num_classes=80, feature_size=256, act=nn.ReLU):
+    def __init__(self, num_features_in, num_anchors=9, num_classes=80, feature_size=256, act=nn.ReLU, conv=nn.Conv2d,
+                 sigmoid=True):
         super(ClassificationModel, self).__init__()
 
         self.num_classes = num_classes
         self.num_anchors = num_anchors
 
-        self.conv1 = nn.Conv2d(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
         self.act1 = act
 
-        self.conv2 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
         self.act2 = act
 
-        self.conv3 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
         self.act3 = act
 
-        self.conv4 = nn.Conv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
         self.act4 = act
 
-        self.output = nn.Conv2d(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
-        self.output_act = nn.Sigmoid()
+        self.output = conv(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
+        self.output_act = act
+        if sigmoid:
+            self.output_act = nn.Sigmoid()
 
     def forward(self, x):
         out = self.conv1(x)
@@ -154,17 +157,17 @@ class ClassificationModel(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, num_classes, block, layers, act=GroupSort(2, axis=1)):
+    def __init__(self, num_classes, block, layers, act=GroupSort(2, axis=1), conv=nn.Conv2d):
         self.inplanes = 64
         super(ResNet, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = conv(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = act #nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.layer1 = self._make_layer(block, 64, layers[0], conv=conv)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, conv=conv)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, conv=conv)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, conv=conv)
 
         if block == BasicBlock or block == GroupBlock:
             fpn_sizes = [self.layer2[layers[1] - 1].conv2.out_channels, self.layer3[layers[2] - 1].conv2.out_channels,
@@ -175,10 +178,10 @@ class ResNet(nn.Module):
         else:
             raise ValueError(f"Block type {block} not understood")
 
-        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
+        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2], act=act, conv=conv)
 
-        self.regressionModel = RegressionModel(256, num_anchors=15, act=act)
-        self.classificationModel = ClassificationModel(256, num_classes=num_classes, num_anchors=15, act=act)
+        self.regressionModel = RegressionModel(256, num_anchors=15, act=act, conv=conv)
+        self.classificationModel = ClassificationModel(256, num_classes=num_classes, num_anchors=15, act=act, conv=conv)
 
         self.anchors = Anchors()
 
@@ -189,7 +192,7 @@ class ResNet(nn.Module):
         self.focalLoss = losses.FocalLoss()
 
         for m in self.modules():
-            if isinstance(m, nn.Conv2d):
+            if isinstance(m, conv):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
             elif isinstance(m, nn.BatchNorm2d):
@@ -206,12 +209,12 @@ class ResNet(nn.Module):
 
         self.freeze_bn()
 
-    def _make_layer(self, block, planes, blocks, stride=1):
+    def _make_layer(self, block, planes, blocks, stride=1, conv=nn.Conv2d):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                nn.Conv2d(self.inplanes, planes * block.expansion,
-                          kernel_size=1, stride=stride, bias=False),
+                conv(self.inplanes, planes * block.expansion,
+                     kernel_size=1, stride=stride, bias=False),
                 nn.BatchNorm2d(planes * block.expansion),
             )
 

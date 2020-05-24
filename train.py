@@ -5,9 +5,14 @@ import os
 
 import numpy as np
 
-#if os.name == 'nt':
-    #import ctypes
-    #ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
+import torch
+
+from retinanet.activations import GroupSort
+from retinanet.layers.bjork_conv2d import BjorckConv2d
+
+if os.name == 'nt':
+    import ctypes
+    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
 
 
 import torch.optim as optim
@@ -32,7 +37,7 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
-    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
+    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=51)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
@@ -68,6 +73,9 @@ def main(args=None):
         retinanet = model.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
         retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+    elif parser.depth == 51:
+        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
+                                   act=GroupSort(2, axis=1), conv=BjorckConv2d)
     elif parser.depth == 101:
         retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -142,7 +150,7 @@ def main(args=None):
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
-            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.1)
+            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.3)
 
         scheduler.step(np.mean(epoch_loss))
 
