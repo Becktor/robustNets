@@ -13,8 +13,9 @@ class Anchors(nn.Module):
             self.strides = [2 ** x for x in self.pyramid_levels]
         if sizes is None:
             self.sizes = [2 ** x for x in self.pyramid_levels]
+            #self.sizes = [14, 21, 34, 60, 132]
         if ratios is None:
-            self.ratios = np.array([0.76, 1.13, 1.58, 2.18, 3.2],)
+            self.ratios = np.array([0.76, 1.14, 1.57, 2.18, 3.2],)
         if scales is None:
             self.scales = np.array([0.5, 1, 2])
 

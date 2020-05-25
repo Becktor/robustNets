@@ -37,7 +37,7 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
-    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=51)
+    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
@@ -90,7 +90,7 @@ def main(args=None):
     boat_mAP = 0
     buoy_mAP = 0
     retinanet = torch.nn.DataParallel(retinanet).cuda()
-    optimizer = optim.Adam(retinanet.parameters(), lr=1e-5)
+    optimizer = optim.Adam(retinanet.parameters(), lr=1e-6)
     checkpoint_dir = os.path.join('trained_models', 'retinanet') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is not None:

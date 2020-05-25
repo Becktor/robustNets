@@ -11,7 +11,7 @@ from retinanet import losses
 from retinanet.activations import *
 from retinanet.anchors import Anchors
 from retinanet.layers.bjork_conv2d import BjorckConv2d
-from retinanet.utils import BasicBlock, GroupBlock, Bottleneck, Bottleneck_groupsort, BBoxTransform, ClipBoxes
+from retinanet.utils import BasicBlock, GroupBlock, Bottleneck, BottleneckGroupsort, BBoxTransform, ClipBoxes
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -27,26 +27,34 @@ class PyramidFeatures(nn.Module):
         super(PyramidFeatures, self).__init__()
 
         # upsample C5 to get P5 from the FPN paper
-
         self.P5_1 = conv(C5_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P5_1 = nn.utils.spectral_norm(self.P5_1)
         self.P5_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
         self.P5_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.P5_2 = nn.utils.spectral_norm(self.P5_2)
 
         # add P5 elementwise to C4
         self.P4_1 = conv(C4_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P4_1 = nn.utils.spectral_norm(self.P4_1)
+
         self.P4_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
         self.P4_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.P4_2 = nn.utils.spectral_norm(self.P4_2)
 
         # add P4 elementwise to C3
         self.P3_1 = conv(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P3_1 = nn.utils.spectral_norm(self.P3_1)
         self.P3_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.P3_2 = nn.utils.spectral_norm(self.P3_2)
 
         # "P6 is obtained via a 3x3 stride-2 conv on C5"
         self.P6 = conv(C5_size, feature_size, kernel_size=3, stride=2, padding=1)
+        self.P6 = nn.utils.spectral_norm(self.P6)
 
         # "P7 is computed by applying ReLU followed by a 3x3 stride-2 conv on P6"
         self.P7_1 = act  # GroupSort(2,axis=1)
         self.P7_2 = conv(feature_size, feature_size, kernel_size=3, stride=2, padding=1)
+        self.P7_2 = nn.utils.spectral_norm(self.P7_2)
 
     def forward(self, inputs):
         C3, C4, C5 = inputs
@@ -73,22 +81,27 @@ class PyramidFeatures(nn.Module):
 
 
 class RegressionModel(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, feature_size=256, act=nn.ReLU, conv=nn.Conv2d):
+    def __init__(self, num_features_in, num_anchors=9, feature_size=256, act=nn.ReLU(), conv=nn.Conv2d):
         super(RegressionModel, self).__init__()
 
         self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.conv1 = nn.utils.spectral_norm(self.conv1)
         self.act1 = act
 
         self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv2 = nn.utils.spectral_norm(self.conv2)
         self.act2 = act
 
         self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv3 = nn.utils.spectral_norm(self.conv3)
         self.act3 = act
 
         self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv4 = nn.utils.spectral_norm(self.conv4)
         self.act4 = act
 
         self.output = conv(feature_size, num_anchors * 4, kernel_size=3, padding=1)
+
 
     def forward(self, x):
         out = self.conv1(x)
@@ -109,7 +122,7 @@ class RegressionModel(nn.Module):
 
 class ClassificationModel(nn.Module):
 
-    def __init__(self, num_features_in, num_anchors=9, num_classes=80, feature_size=256, act=nn.ReLU, conv=nn.Conv2d,
+    def __init__(self, num_features_in, num_anchors=9, num_classes=80, feature_size=256, act=nn.ReLU(), conv=nn.Conv2d,
                  sigmoid=True):
         super(ClassificationModel, self).__init__()
 
@@ -117,15 +130,18 @@ class ClassificationModel(nn.Module):
         self.num_anchors = num_anchors
 
         self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.conv1 = nn.utils.spectral_norm(self.conv1)
         self.act1 = act
-
         self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv2 = nn.utils.spectral_norm(self.conv2)
         self.act2 = act
 
         self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv3 = nn.utils.spectral_norm(self.conv3)
         self.act3 = act
 
         self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
+        self.conv4 = nn.utils.spectral_norm(self.conv4)
         self.act4 = act
 
         self.output = conv(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
@@ -162,17 +178,17 @@ class ResNet(nn.Module):
         super(ResNet, self).__init__()
         self.conv1 = conv(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = nn.BatchNorm2d(64)
-        self.relu = act #nn.ReLU(inplace=True)
+        self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0], conv=conv)
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, conv=conv)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, conv=conv)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, conv=conv)
+        self.layer1 = self._make_layer(block, 64, layers[0])
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
 
         if block == BasicBlock or block == GroupBlock:
             fpn_sizes = [self.layer2[layers[1] - 1].conv2.out_channels, self.layer3[layers[2] - 1].conv2.out_channels,
                          self.layer4[layers[3] - 1].conv2.out_channels]
-        elif block == Bottleneck or block == Bottleneck_groupsort:
+        elif block == Bottleneck or block == BottleneckGroupsort:
             fpn_sizes = [self.layer2[layers[1] - 1].conv3.out_channels, self.layer3[layers[2] - 1].conv3.out_channels,
                          self.layer4[layers[3] - 1].conv3.out_channels]
         else:
@@ -209,7 +225,7 @@ class ResNet(nn.Module):
 
         self.freeze_bn()
 
-    def _make_layer(self, block, planes, blocks, stride=1, conv=nn.Conv2d):
+    def _make_layer(self, block, planes, blocks, stride=1, act=nn.ReLU(inplace=True), conv=nn.Conv2d):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
@@ -218,10 +234,10 @@ class ResNet(nn.Module):
                 nn.BatchNorm2d(planes * block.expansion),
             )
 
-        layers = [block(self.inplanes, planes, stride, downsample)]
+        layers = [block(self.inplanes, planes, stride, downsample, act=act, conv=conv)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes))
+            layers.append(block(self.inplanes, planes, act=act, conv=conv))
 
         return nn.Sequential(*layers)
 
@@ -319,7 +335,7 @@ def groupnet50(num_classes, pretrained=False, **kwargs):
     Args:
         pretrained (bool): If True, returns a model pre-trained on ImageNet
     """
-    model = ResNet(num_classes, Bottleneck_groupsort, [3, 4, 6, 3], **kwargs)
+    model = ResNet(num_classes, BottleneckGroupsort, [3, 4, 6, 3], **kwargs)
     if pretrained:
         model.load_state_dict(model_zoo.load_url(model_urls['resnet50'], model_dir='.'), strict=False)
     return model
