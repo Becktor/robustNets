@@ -13,12 +13,12 @@ def natural_keys(text):
     return [atoi(c) for c in re.split(r'(\d+)', text)]
 
 
-def save_ckp(state, is_best, checkpoint_dir, epoch):
+def save_ckp(state, model, is_best, checkpoint_dir, epoch):
     f_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
     torch.save(state, f_path)
     if is_best:
         best_filepath = os.path.join(checkpoint_dir, 'best_model_{}.pt'.format(epoch))
-        shutil.copyfile(f_path, best_filepath)
+        torch.save(model, best_filepath)
 
 
 def load_ckp(checkpoint_filepath, model, optimizer):

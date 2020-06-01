@@ -1,4 +1,4 @@
-from retinanet.activations.base_activation import Activation
+from network.activations.base_activation import Activation
 
 
 class Identity(Activation):

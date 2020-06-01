@@ -58,16 +58,16 @@ def _compute_ap(recall, precision):
     return ap
 
 
-def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100, save_path=None):
-    """ Get the detections from the retinanet using the generator.
+def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100, noise_level=0.0):
+    """ Get the detections from the network using the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = detections[num_detections, 4 + num_classes]
     # Arguments
-        dataset         : The generator used to run images through the retinanet.
-        retinanet           : The retinanet to run on the images.
+        dataset         : The generator used to run images through the network.
+        network           : The network to run on the images.
         score_threshold : The score confidence threshold to use.
         max_detections  : The maximum number of detections to use per image.
-        save_path       : The path to save the images with visualized detections to.
+        noise_level       : Amount of gaussian noise added
     # Returns
         A list of lists containing the detections for each image in the generator.
     """
@@ -80,9 +80,13 @@ def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100
         for index in range(len(dataset)):
             data = dataset[index]
             scale = data['scale']
+            img = data['img']
+
+            if noise_level > 0:
+                img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
 
             # run network
-            scores, labels, boxes = retinanet(data['img'].permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
+            scores, labels, boxes = retinanet(img.permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
             scores = scores.cpu().numpy()
             labels = labels.cpu().numpy()
             boxes = boxes.cpu().numpy()
@@ -152,10 +156,10 @@ def evaluate(
         max_detections=100,
         save_path=None
 ):
-    """ Evaluate a given dataset using a given retinanet.
+    """ Evaluate a given dataset using a given network.
     # Arguments
         generator       : The generator that represents the dataset to evaluate.
-        retinanet           : The retinanet to evaluate.
+        network           : The network to evaluate.
         iou_threshold   : The threshold used to consider when a detection is positive or negative.
         score_threshold : The score confidence threshold to use for detections.
         max_detections  : The maximum number of detections to use per image.
@@ -167,7 +171,7 @@ def evaluate(
     # gather all detections and annotations
 
     all_detections = _get_detections(generator, retinanet, score_threshold=score_threshold,
-                                     max_detections=max_detections, save_path=save_path)
+                                     max_detections=max_detections)
     all_annotations = _get_annotations(generator)
     return_list = []
     average_precisions = {}

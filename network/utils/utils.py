@@ -2,7 +2,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from retinanet.activations import *
+from network.activations import *
 
 
 class BasicBlock(nn.Module):

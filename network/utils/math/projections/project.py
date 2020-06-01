@@ -1,6 +1,6 @@
 import torch
 
-from retinanet.utils.math.projections import *
+from network.utils.math.projections import *
 
 
 def project_weights(weight, proj_config, cuda=False):

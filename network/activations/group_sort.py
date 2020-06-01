@@ -11,11 +11,8 @@ class GroupSort(nn.Module):
         self.axis = axis
 
     def forward(self, x):
-        prev_shape = x.shape
-        x = torch.flatten(x, start_dim=2)
         group_sorted = group_sort(x, self.num_units, self.axis)
         assert check_group_sorted(group_sorted, self.num_units, axis=self.axis) == 1, "GroupSort failed. "
-        group_sorted = torch.reshape(group_sorted, prev_shape)
         return group_sorted
 
     def extra_repr(self):
@@ -40,7 +37,7 @@ def group_sort(x, num_units, axis=-1):
     size = process_group_size(x, num_units, axis)
     grouped_x = x.view(*size)
     sort_dim = axis if axis == -1 else axis + 1
-    sorted_grouped_x, _ = grouped_x.sort(dim=sort_dim)
+    sorted_grouped_x, sort = grouped_x.sort(dim=sort_dim)
     sorted_x = sorted_grouped_x.view(*list(x.shape))
 
     return sorted_x
@@ -48,10 +45,9 @@ def group_sort(x, num_units, axis=-1):
 
 def check_group_sorted(x, num_units, axis=-1):
     size = process_group_size(x, num_units, axis)
-
     x_np = x.cpu().data.numpy()
     x_np = x_np.reshape(*size)
-    x_np_diff = np.diff(x_np, axis=2)
+    x_np_diff = np.diff(x_np, axis=axis + 1)
 
     # Return 1 iff all elements are increasing.
     if np.sum(x_np_diff < 0) > 0:

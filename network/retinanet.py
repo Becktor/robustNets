@@ -7,11 +7,11 @@ from torch import Tensor
 from torch.nn import Conv2d
 from torchvision.ops import nms
 
-from retinanet import losses
-from retinanet.activations import *
-from retinanet.anchors import Anchors
-from retinanet.layers.bjork_conv2d import BjorckConv2d
-from retinanet.utils import BasicBlock, GroupBlock, Bottleneck, BottleneckGroupsort, BBoxTransform, ClipBoxes
+from network import losses
+from network.activations import *
+from network.anchors import Anchors
+from network.layers.bjork_conv2d import BjorckConv2d
+from network.utils import BasicBlock, GroupBlock, Bottleneck, BottleneckGroupsort, BBoxTransform, ClipBoxes
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',

@@ -2,7 +2,7 @@ import torch
 from torch.nn.modules.conv import _ConvNd
 from torch.nn.modules.utils import _pair
 
-from retinanet.utils.math.projections import project_weights
+from network.utils.math.projections import project_weights
 
 
 class BaseConv2D(_ConvNd):

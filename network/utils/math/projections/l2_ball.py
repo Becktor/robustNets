@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 
-from retinanet.utils.misc import to_cuda
+from network.utils.misc import to_cuda
 
 
 def bjorck_orthonormalize(w, beta=0.5, iters=20, order=1):

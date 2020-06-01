@@ -10,11 +10,11 @@ if os.name == 'nt':
     import ctypes
 
     ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
-from retinanet import model
+from network import retinanet
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
-from retinanet.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, UnNormalizer, Normalizer
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, UnNormalizer, Normalizer
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -22,8 +22,7 @@ assert torch.__version__.split('.')[0] == '1'
 # print('CUDA available: {}'.format(torch.cuda.is_available()))
 
 def main(args=None):
-    parser = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
-
+    parser = argparse.ArgumentParser(description='Validation script for RetinaNet network.')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--model', help='Path to model (.pt) file.')
@@ -35,7 +34,7 @@ def main(args=None):
 
     sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
     dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=collater, batch_sampler=sampler_val)
-    retinanet = model.resnet50(dataset_val.num_classes())
+    retinanet = retinanet.resnet50(dataset_val.num_classes())
 
     use_gpu = True
 
@@ -56,7 +55,6 @@ def main(args=None):
         cv2.putText(image, caption, (b[0], b[1] - 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
 
     for idx, data in enumerate(dataloader_val):
-
         cimg = data['img']
         s = cimg.shape
         noisy_data = cimg + (0.01 ** 0.5) * torch.randn(s[0], s[1], s[2], s[3])
@@ -91,7 +89,7 @@ def main(args=None):
 
                 # cv2.imshow('img', img)
                 # cv2.waitKey(0)
-                cv2.imwrite(r"C:\Users\Jobe\Documents\git\pytorch-retinanet\{}_img_".format(idx) + str(ix) + ".png",
+                cv2.imwrite(r"C:\Users\Jobe\Documents\git\pytorch-network\{}_img_".format(idx) + str(ix) + ".png",
                             img)
 
 

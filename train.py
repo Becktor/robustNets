@@ -7,29 +7,26 @@ import numpy as np
 
 import torch
 
-from retinanet.activations import GroupSort
-from retinanet.layers.bjork_conv2d import BjorckConv2d
+from network.activations import GroupSort
+from network.layers.bjork_conv2d import BjorckConv2d
 
 if os.name == 'nt':
     import ctypes
-    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
 
+    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
 
 import torch.optim as optim
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 
-from retinanet import model
-from retinanet.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
+from network import retinanet
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
     Normalizer
 from torch.utils.data import DataLoader
-from retinanet import csv_eval
+from network import csv_eval
 from utils import *
 
 assert torch.__version__.split('.')[0] == '1'
-
-
-# print('CUDA available: {}'.format(torch.cuda.is_available()))
 
 
 def main(args=None):
@@ -68,61 +65,60 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        retinanet = model.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
-        retinanet = model.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
-        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 51:
-        retinanet = model.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
+        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
                                    act=GroupSort(2, axis=1), conv=BjorckConv2d)
     elif parser.depth == 101:
-        retinanet = model.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
-        retinanet = model.resnet152(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet152(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 
     use_gpu = True
     if use_gpu:
-        retinanet = retinanet.cuda()
+        model = model.cuda()
     prev_epoch = 0
     boat_mAP = 0
     buoy_mAP = 0
-    retinanet = torch.nn.DataParallel(retinanet).cuda()
-    optimizer = optim.Adam(retinanet.parameters(), lr=1e-6)
-    checkpoint_dir = os.path.join('trained_models', 'retinanet') + dt.datetime.now().strftime("%j_%H%M")
+    model = torch.nn.DataParallel(model).cuda()
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
-    if parser.continue_training is not None:
-        retinanet, optimizer, checkpoint_dict = load_ckp(parser.continue_training, retinanet, optimizer)
+    writer = SummaryWriter(checkpoint_dir + "/tb_event")
+    if parser.continue_training is None:
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+        writer.add_graph(retinanet)
+    else:
+        model, optimizer, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer)
         checkpoint_dir = parser.continue_training
         prev_epoch = checkpoint_dict['epoch']
         boat_mAP = checkpoint_dict['boat_mAP']
         buoy_mAP = checkpoint_dict['buoy_mAP']
-    else:
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
 
-    writer = SummaryWriter(checkpoint_dir + "/tb_event")
-    retinanet.training = True
+    model.training = True
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
-
     loss_hist = collections.deque(maxlen=500)
-    retinanet.train()
-    retinanet.module.freeze_bn()
-
+    model.train()
+    model.module.freeze_bn()
     print('Num training images: {}'.format(len(dataset_train)))
 
     for epoch_num in range(parser.epochs):
         curr_epoch = prev_epoch + epoch_num
-        retinanet.train()
-        retinanet.module.freeze_bn()
+        model.train()
+        model.module.freeze_bn()
         epoch_loss = []
 
         for iter_num, data in enumerate(dataloader_train):
             try:
                 optimizer.zero_grad()
-                classification_loss, regression_loss = retinanet([data['img'].cuda().float(), data['annot']])
+                classification_loss, regression_loss = model([data['img'].cuda().float(), data['annot']])
                 classification_loss = classification_loss.mean()
                 regression_loss = regression_loss.mean()
                 loss = classification_loss + regression_loss
@@ -130,7 +126,7 @@ def main(args=None):
                     continue
 
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(retinanet.parameters(), 0.1)
+                torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
                 optimizer.step()
 
                 loss_hist.append(float(loss))
@@ -150,10 +146,11 @@ def main(args=None):
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
-            mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.3)
+            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
 
         scheduler.step(np.mean(epoch_loss))
 
+        # Write to Tensorboard
         writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
         writer.add_scalar("val/mAP_Buoy", rl[2][1], curr_epoch)
         writer.add_scalar("val/mAP_Boat", rl[3][1], curr_epoch)
@@ -166,7 +163,7 @@ def main(args=None):
 
         checkpoint = {
             'epoch': curr_epoch + 1,
-            'state_dict': retinanet.state_dict(),
+            'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'buoy_mAP': rl[2][1],
             'boat_mAP': rl[3][1]
@@ -175,17 +172,17 @@ def main(args=None):
         if rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP:
             boat_mAP = rl[3][1]
             buoy_mAP = rl[2][1]
-            save_ckp(checkpoint, True, checkpoint_dir, curr_epoch)
+            save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)
         else:
-            save_ckp(checkpoint, False, checkpoint_dir, curr_epoch)
+            save_ckp(checkpoint, model, False, checkpoint_dir, curr_epoch)
 
         loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
         loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
                                                                   rl[0], rl[1], rl[2], rl[3], buoy_mAP, boat_mAP))
         loss_file.close()
 
-    retinanet.eval()
-    torch.save(retinanet, 'model_final.pt')
+    model.eval()
+    torch.save(model, 'model_final.pt')
 
 
 if __name__ == '__main__':
