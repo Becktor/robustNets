@@ -94,7 +94,6 @@ def main(args=None):
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
-        writer.add_graph(retinanet)
     else:
         model, optimizer, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer)
         checkpoint_dir = parser.continue_training
@@ -114,7 +113,7 @@ def main(args=None):
         model.train()
         model.module.freeze_bn()
         epoch_loss = []
-
+        get_lr(optimizer)
         for iter_num, data in enumerate(dataloader_train):
             try:
                 optimizer.zero_grad()
@@ -122,6 +121,7 @@ def main(args=None):
                 classification_loss = classification_loss.mean()
                 regression_loss = regression_loss.mean()
                 loss = classification_loss + regression_loss
+
                 if bool(loss == 0):
                     continue
 
@@ -169,7 +169,7 @@ def main(args=None):
             'boat_mAP': rl[3][1]
         }
 
-        if rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP:
+        if (rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP) or rl[2][1] > buoy_mAP:
             boat_mAP = rl[3][1]
             buoy_mAP = rl[2][1]
             save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)

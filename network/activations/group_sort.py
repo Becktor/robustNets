@@ -1,5 +1,4 @@
 import numpy as np
-import torch
 import torch.nn as nn
 
 
@@ -47,7 +46,8 @@ def check_group_sorted(x, num_units, axis=-1):
     size = process_group_size(x, num_units, axis)
     x_np = x.cpu().data.numpy()
     x_np = x_np.reshape(*size)
-    x_np_diff = np.diff(x_np, axis=axis + 1)
+    axis = axis if axis == -1 else axis + 1
+    x_np_diff = np.diff(x_np, axis=axis)
 
     # Return 1 iff all elements are increasing.
     if np.sum(x_np_diff < 0) > 0:
