@@ -114,6 +114,7 @@ def main(args=None):
         model.module.freeze_bn()
         epoch_loss = []
         get_lr(optimizer)
+        print('============= Starting ============\n')
         for iter_num, data in enumerate(dataloader_train):
             try:
                 optimizer.zero_grad()
