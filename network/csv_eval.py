@@ -58,7 +58,7 @@ def _compute_ap(recall, precision):
     return ap
 
 
-def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100, noise_level=0.0):
+def _get_detections(dataset, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
     """ Get the detections from the network using the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = detections[num_detections, 4 + num_classes]
@@ -73,7 +73,7 @@ def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100
     """
     all_detections = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
 
-    retinanet.eval()
+    model.eval()
 
     with torch.no_grad():
 
@@ -86,7 +86,7 @@ def _get_detections(dataset, retinanet, score_threshold=0.05, max_detections=100
                 img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
 
             # run network
-            scores, labels, boxes = retinanet(img.permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
+            scores, labels, boxes = model(img.permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
             scores = scores.cpu().numpy()
             labels = labels.cpu().numpy()
             boxes = boxes.cpu().numpy()

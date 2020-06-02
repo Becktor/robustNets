@@ -21,7 +21,7 @@ assert torch.__version__.split('.')[0] == '1'
 
 # print('CUDA available: {}'.format(torch.cuda.is_available()))
 
-def main(args=None, retinanet=None):
+def main(args=None, model=None):
     parser = argparse.ArgumentParser(description='Validation script for RetinaNet network.')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
@@ -32,22 +32,24 @@ def main(args=None, retinanet=None):
     dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
                              transform=transforms.Compose([Normalizer(), Resizer()]))
 
-    retinanet = retinanet.resnet50(dataset_val.num_classes())
+    model = torch.load(parser.model)
 
     use_gpu = True
 
     if use_gpu:
-        retinanet = retinanet.cuda()
+        if torch.cuda.is_available():
+            model = model.cuda()
 
-    retinanet = torch.nn.DataParallel(retinanet).cuda()
-    checkpoint = torch.load(parser.model)
-    retinanet.load_state_dict(checkpoint['state_dict'])
+    if torch.cuda.is_available():
+        retinanet = torch.nn.DataParallel(model).cuda()
+    else:
+        retinanet = torch.nn.DataParallel(model)
 
-    retinanet.eval()
+    model.eval()
     unnormalize = UnNormalizer()
 
     print('Evaluating dataset')
-    mAP, rl = csv_eval.evaluate(dataset_val, retinanet, 0.3, 0.7)
+    mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.7)
 
 if __name__ == '__main__':
     main()

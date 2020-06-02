@@ -113,9 +113,10 @@ def main(args=None):
         model.train()
         model.module.freeze_bn()
         epoch_loss = []
-        get_lr(optimizer)
-        print('============= Starting ============\n')
+        print(get_lr(optimizer))
+        print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
+
             try:
                 optimizer.zero_grad()
                 classification_loss, regression_loss = model([data['img'].cuda().float(), data['annot']])
@@ -147,6 +148,7 @@ def main(args=None):
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
+
             mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
 
         scheduler.step(np.mean(epoch_loss))
@@ -173,9 +175,9 @@ def main(args=None):
         if (rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP) or rl[2][1] > buoy_mAP:
             boat_mAP = rl[3][1]
             buoy_mAP = rl[2][1]
-            save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)
+            save_ckp(checkpoint, model.module, True, checkpoint_dir, curr_epoch)
         else:
-            save_ckp(checkpoint, model, False, checkpoint_dir, curr_epoch)
+            save_ckp(checkpoint, model.module, False, checkpoint_dir, curr_epoch)
 
         loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
         loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
@@ -183,7 +185,7 @@ def main(args=None):
         loss_file.close()
 
     model.eval()
-    torch.save(model, 'model_final.pt')
+    torch.save(model.module, 'model_final.pt')
 
 
 if __name__ == '__main__':
