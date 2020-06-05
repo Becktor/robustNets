@@ -1,1 +1,1 @@
-from network.utils.utils import BasicBlock, GroupBlock, Bottleneck, BottleneckGroupsort, BBoxTransform, ClipBoxes
+from network.utils.utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
