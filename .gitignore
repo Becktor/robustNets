@@ -9,9 +9,7 @@ trained_models/
 *.out
 *.xml
 *.iml
-*.sh
 
->>>>>>> a3d0b58... updated gitignore
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
