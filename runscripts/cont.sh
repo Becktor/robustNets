@@ -22,8 +22,8 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o spectral_gs4.out
-#BSUB -e spectral_gs4.err
+#BSUB -o spectral_relu.out
+#BSUB -e spectral_relu.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
