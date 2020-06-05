@@ -227,7 +227,7 @@ class ResNet(nn.Module):
 
         self.freeze_bn()
 
-    def _make_layer(self, block, planes, blocks, stride=1, act=nn.ReLU(inplace=True), conv=nn.Conv2d):
+    def _make_layer(self, block, planes, blocks, stride=1, act=nn.ReLU(), conv=nn.Conv2d):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             if self.spectral_norm:
