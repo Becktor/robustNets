@@ -69,10 +69,8 @@ def main(args=None):
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
-        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
-    elif parser.depth == 51:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=GroupSort(2, axis=1))
+                                   act=GroupSort(8, axis=1), spectral_norm=True)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:

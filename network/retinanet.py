@@ -23,7 +23,7 @@ model_urls = {
 
 
 class PyramidFeatures(nn.Module):
-    def __init__(self, C3_size, C4_size, C5_size, feature_size=256, act=nn.ReLU, conv=nn.Conv2d):
+    def __init__(self, C3_size, C4_size, C5_size, feature_size=256, act=nn.ReLU(), conv=nn.Conv2d):
         super(PyramidFeatures, self).__init__()
 
         # upsample C5 to get P5 from the FPN paper
@@ -172,7 +172,7 @@ class ClassificationModel(nn.Module):
 
 class ResNet(nn.Module):
 
-    def __init__(self, num_classes, block, layers, act=GroupSort(4, axis=1), conv=nn.Conv2d, spectral_norm=True):
+    def __init__(self, num_classes, block, layers, act=nn.ReLU(), conv=nn.Conv2d, spectral_norm=False):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.spectral_norm = spectral_norm
@@ -240,7 +240,8 @@ class ResNet(nn.Module):
                     nn.BatchNorm2d(planes * block.expansion),
                 )
 
-        layers = [block(self.inplanes, planes, stride, downsample, act=act, conv=conv)]
+        layers = [block(self.inplanes, planes, stride, downsample, act=act,
+                        conv=conv, spectral_norm=self.spectral_norm)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes, act=act, conv=conv))

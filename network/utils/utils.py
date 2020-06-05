@@ -73,7 +73,7 @@ class Bottleneck(nn.Module):
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, downsample=None,
-                 act=GroupSort(2, axis=1), conv=nn.Conv2d, spectral_norm=True):
+                 act=GroupSort(2, axis=1), conv=nn.Conv2d, spectral_norm=False):
         super(Bottleneck, self).__init__()
         self.spectral_norm = spectral_norm
 
