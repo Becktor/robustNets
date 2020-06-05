@@ -90,14 +90,20 @@ def main(args=None):
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
+        writer = SummaryWriter(checkpoint_dir + "/tb_event")
+        dataiter = iter(dataloader_train)
+        data = dataiter.next()
+        writer.add_graph(model.module, data['img'].cuda().float())
+
     else:
         model, optimizer, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer)
         checkpoint_dir = parser.continue_training
+        writer = SummaryWriter(checkpoint_dir + "/tb_event")
         prev_epoch = checkpoint_dict['epoch']
         boat_mAP = checkpoint_dict['boat_mAP']
         buoy_mAP = checkpoint_dict['buoy_mAP']
 
-    writer = SummaryWriter(checkpoint_dir + "/tb_event")
+
     model.training = True
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
     loss_hist = collections.deque(maxlen=500)
@@ -113,8 +119,6 @@ def main(args=None):
         print(get_lr(optimizer))
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
-            if iter_num % 10 == 0:
-                break
             try:
                 optimizer.zero_grad()
                 classification_loss, regression_loss = model([data['img'].cuda().float(), data['annot']])
