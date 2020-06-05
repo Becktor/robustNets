@@ -22,11 +22,11 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o standard_relu.out
-#BSUB -e standard_relu.err
+#BSUB -o spectral_relu.out
+#BSUB -e spectral_relu.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
-source /work1/jbibe/venv/bin/activate
+source /work1/jbibe/git/pytorch-retinanet/venv/bin/activate
 python train.py --csv_train /work1/jbibe/mmdet/fix_annotations_rgb_train.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --batch_size=4
