@@ -12,4 +12,4 @@ Working on it
 
 - Significant amounts of code are borrowed from the [keras retinanet implementation](https://github.com/fizyr/keras-retinanet)
 - The NMS module used is from the [pytorch faster-rcnn implementation](https://github.com/ruotianluo/pytorch-faster-rcnn)
-- The iplementations of Group Sort, and the Bjorck Convolution is from the [LNets](https://github.com/cemanil/LNets)
+- The implementations of Group Sort, and the Bjorck Convolution is from the [LNets](https://github.com/cemanil/LNets)
