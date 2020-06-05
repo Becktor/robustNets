@@ -69,71 +69,48 @@ class GroupBlock(nn.Module):
         return out
 
 
-class BottleneckGroupsort(nn.Module):
-    expansion = 4
-
-    def __init__(self, inplanes, planes, stride=1, downsample=None, act=GroupSort(2, axis=1), conv=nn.Conv2d):
-        super(BottleneckGroupsort, self).__init__()
-        self.conv1 = conv(inplanes, planes, kernel_size=1, bias=False)
-        self.conv2 = conv(planes, planes, kernel_size=3, stride=stride,
-                          padding=1, bias=False)
-        self.conv3 = conv(planes, planes * 4, kernel_size=1, bias=False)
-        self.act1 = act
-        self.downsample = downsample
-        self.stride = stride
-
-    def forward(self, x):
-        residual = x
-
-        out = self.conv1(x)
-        out = self.act(out)
-
-        out = self.conv2(out)
-        out = self.act(out)
-
-        out = self.conv3(out)
-
-        if self.downsample is not None:
-            residual = self.downsample(x)
-
-        out += residual
-        out = self.act(out)
-
-        return out
-
-
 class Bottleneck(nn.Module):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, act=GroupSort(2, axis=1), conv=nn.Conv2d):
+    def __init__(self, inplanes, planes, stride=1, downsample=None,
+                 act=GroupSort(2, axis=1), conv=nn.Conv2d, spectral_norm=True):
         super(Bottleneck, self).__init__()
+        self.spectral_norm = spectral_norm
+
         self.conv1 = conv(inplanes, planes, kernel_size=1, bias=False)
-        self.conv1 = nn.utils.spectral_norm(self.conv1)
-        self.bn1 = nn.BatchNorm2d(planes)
-        self.conv2 = conv(planes, planes, kernel_size=3, stride=stride,
-                          padding=1, bias=False)
-        self.conv2 = nn.utils.spectral_norm(self.conv2)
-        self.bn2 = nn.BatchNorm2d(planes)
+
+        self.conv2 = conv(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+
         self.conv3 = conv(planes, planes * 4, kernel_size=1, bias=False)
-        self.conv3 = nn.utils.spectral_norm(self.conv3)
-        self.bn3 = nn.BatchNorm2d(planes * 4)
+
         self.act = act
         self.downsample = downsample
         self.stride = stride
+        if spectral_norm:
+            self.conv1 = nn.utils.spectral_norm(self.conv1)
+            self.conv2 = nn.utils.spectral_norm(self.conv2)
+            self.conv3 = nn.utils.spectral_norm(self.conv3)
+        else:
+            self.bn1 = nn.BatchNorm2d(planes)
+            self.bn2 = nn.BatchNorm2d(planes)
+            self.bn3 = nn.BatchNorm2d(planes * 4)
 
     def forward(self, x):
         residual = x
 
         out = self.conv1(x)
-        out = self.bn1(out)
+        if not self.spectral_norm:
+            out = self.bn1(out)
         out = self.act(out)
 
         out = self.conv2(out)
-        out = self.bn2(out)
+        if not self.spectral_norm:
+            out = self.bn2(out)
         out = self.act(out)
 
         out = self.conv3(out)
-        out = self.bn3(out)
+        if not self.spectral_norm:
+            out = self.bn3(out)
 
         if self.downsample is not None:
             residual = self.downsample(x)

@@ -72,7 +72,7 @@ def main(args=None):
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 51:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=GroupSort(2, axis=1), conv=BjorckConv2d)
+                                   act=GroupSort(2, axis=1))
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -90,7 +90,6 @@ def main(args=None):
     optimizer = optim.Adam(model.parameters(), lr=1e-5)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
-    writer = SummaryWriter(checkpoint_dir + "/tb_event")
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
@@ -101,6 +100,7 @@ def main(args=None):
         boat_mAP = checkpoint_dict['boat_mAP']
         buoy_mAP = checkpoint_dict['buoy_mAP']
 
+    writer = SummaryWriter(checkpoint_dir + "/tb_event")
     model.training = True
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
     loss_hist = collections.deque(maxlen=500)
@@ -116,7 +116,8 @@ def main(args=None):
         print(get_lr(optimizer))
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
-
+            if iter_num % 10 == 0:
+                break
             try:
                 optimizer.zero_grad()
                 classification_loss, regression_loss = model([data['img'].cuda().float(), data['annot']])
