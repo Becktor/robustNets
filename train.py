@@ -85,7 +85,7 @@ def main(args=None):
     boat_mAP = 0
     buoy_mAP = 0
     model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
