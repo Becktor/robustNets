@@ -227,18 +227,21 @@ def evaluate(
         precision = true_positives / np.maximum(true_positives + false_positives, np.finfo(np.float64).eps)
         label_name = generator.label_to_name(label)
         print(label_name)
-        print("Recall: {}".format(np.mean(recall)))
-        print("Precision: {}".format(np.mean(precision)))
-        return_list.append((label_name, np.mean(recall), np.mean(precision)))
+        print("Recall: {}".format(np.max(recall)))
+        print("Precision: {}".format(np.min(precision)))
+        return_list.append((label_name, np.max(recall), np.min(precision)))
 
         # compute average precision
         average_precision = _compute_ap(recall, precision)
         average_precisions[label] = average_precision, num_annotations
 
-    print('\nmAP:')
+    print('\nAP:')
+    map_list = []
     for label in range(generator.num_classes()):
         label_name = generator.label_to_name(label)
+        map_list.append(average_precisions[label][0])
         print('{}: {}'.format(label_name, average_precisions[label][0]))
         return_list.append((label_name, average_precisions[label][0]))
+    print('\nmAP: {}'.format(np.mean(map_list)))
     print('')
     return average_precisions, return_list
