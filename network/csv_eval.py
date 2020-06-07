@@ -227,9 +227,9 @@ def evaluate(
         precision = true_positives / np.maximum(true_positives + false_positives, np.finfo(np.float64).eps)
         label_name = generator.label_to_name(label)
         print(label_name)
-        print("Recall: {}".format(np.mean(recall)))
-        print("Precision: {}".format(np.mean(precision)))
-        return_list.append((label_name, np.mean(recall), np.mean(precision)))
+        print("Recall: {}".format(np.max(recall)))
+        print("Precision: {}".format(np.min(precision)))
+        return_list.append((label_name, np.max(recall), np.min(precision)))
 
         # compute average precision
         average_precision = _compute_ap(recall, precision)
