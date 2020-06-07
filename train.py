@@ -151,7 +151,7 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
+            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.5)
 
         scheduler.step(np.mean(epoch_loss))
 
