@@ -41,14 +41,15 @@ def main(args=None, model=None):
             model = model.cuda()
 
     if torch.cuda.is_available():
-        retinanet = torch.nn.DataParallel(model).cuda()
+        model = torch.nn.DataParallel(model).cuda()
     else:
-        retinanet = torch.nn.DataParallel(model)
+        model = torch.nn.DataParallel(model)
 
     model.eval()
-    unnormalize = UnNormalizer()
 
     print('Evaluating dataset')
+    mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
+    mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.5)
     mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.7)
 
 if __name__ == '__main__':

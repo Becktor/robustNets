@@ -70,7 +70,7 @@ def main(args=None):
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=GroupSort(8, axis=1), spectral_norm=True)
+                                   act=GroupSort(4, axis=1), spectral_norm=True)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -85,7 +85,7 @@ def main(args=None):
     boat_mAP = 0
     buoy_mAP = 0
     model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=1e-5)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -152,7 +152,7 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
+            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.5)
 
         scheduler.step(np.mean(epoch_loss))
 
