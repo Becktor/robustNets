@@ -3,6 +3,9 @@ import argparse
 import matplotlib.pyplot as plt
 import csv
 
+from network.csv_eval import *
+from network.dataloader import CSVDataset, Resizer
+from torchvision import transforms
 
 def iou(box_a, box_b):
     # determine the (x, y)-coordinates of the intersection rectangle
@@ -251,12 +254,38 @@ def main():
     parser.add_argument("-p", "--path", help="file path to results from model", type=str)
     parser.add_argument("-t", "--title", help="figure title name", type=str, default='')
     parser.add_argument("-iou", "--iouThresh", help="Evaluation iou threshold", type=float, default=0.3)
-    parser.add_argument("-conf", "--confThresh", help="Evaluation confidence threshold", type=float, default=0.7)
-    args = parser.parse_args()
 
-    hist_class = Hist(args.path, args.iouThresh, args.confThresh)
+    parser.add_argument("-conf", "--confThresh", help="Evaluation confidence threshold", type=float, default=0.3)
+    parser = parser.parse_args(args)
 
-    hist_class.show_hist(3000, args.title)
+    model = torch.load(parser.model)
+    model_name = os.path.basename(os.path.splitext(parser.model)[0])
+    use_gpu = True
+
+    if use_gpu:
+        if torch.cuda.is_available():
+            model = model.cuda()
+
+    if torch.cuda.is_available():
+        model = torch.nn.DataParallel(model).cuda()
+    else:
+        model = torch.nn.DataParallel(model)
+
+    model.eval()
+    dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
+                             transform=transforms.Compose([Resizer()]))
+    noise = 0.0
+    all_detections = get_detections(dataset_val, model, score_threshold=0.3,
+                                    max_detections=100, noise_level=noise)
+    all_annotations = get_annotations(dataset_val)
+
+    hist_class = Hist(all_detections, all_annotations, parser.iouThresh, parser.confThresh)
+    hist_class.run()
+    hist_class.show_hist(3000, name=model_name+'_BB_' + str(noise))
+
+    hist_class.show_hist(3000, lbl=0, name=model_name+'_Buoy_' + str(noise))
+    hist_class.show_hist(3000, lbl=1, name=model_name+'_Boat_' + str(noise))
+    evaluate(dataset_val, model, 0.3, 0.3, detections=all_detections, annotations=all_annotations)
 
 
 if __name__ == "__main__":

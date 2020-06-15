@@ -2,6 +2,7 @@
 #fold
 trained_models/
 .idea/
+figures/
 #file
 *.pth
 *.csv

@@ -44,14 +44,14 @@ def main(args=None):
     parser = parser.parse_args(args)
 
     dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes,
-                               transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
+                               transform=transforms.Compose([Augmenter(), Resizer()]))
 
     if parser.csv_val is None:
         dataset_val = None
         print('No validation annotations provided.')
     else:
         dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                 transform=transforms.Compose([Normalizer(), Resizer()]))
+                                 transform=transforms.Compose([Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
@@ -172,7 +172,8 @@ def main(args=None):
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'buoy_mAP': rl[2][1],
-            'boat_mAP': rl[3][1]
+            'boat_mAP': rl[3][1],
+            'mAP': rl[4]
         }
 
         if (rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP) or rl[2][1] > buoy_mAP:
