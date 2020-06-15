@@ -31,7 +31,7 @@ def compute_overlap(a, b):
     return intersection / ua
 
 
-def _compute_ap(recall, precision):
+def compute_ap(recall, precision):
     """ Compute the average precision, given the recall and precision curves.
     Code originally from https://github.com/rbgirshick/py-faster-rcnn.
     # Arguments
@@ -58,7 +58,7 @@ def _compute_ap(recall, precision):
     return ap
 
 
-def _get_detections(dataset, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
+def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
     """ Get the detections from the network using the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = detections[num_detections, 4 + num_classes]
@@ -83,7 +83,8 @@ def _get_detections(dataset, model, score_threshold=0.05, max_detections=100, no
             img = data['img']
 
             if noise_level > 0:
-                img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
+                noise = torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
+                img = img + noise
 
             # run network
             scores, labels, boxes = model(img.permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
@@ -123,7 +124,7 @@ def _get_detections(dataset, model, score_threshold=0.05, max_detections=100, no
     return all_detections
 
 
-def _get_annotations(generator):
+def get_annotations(generator):
     """ Get the ground truth annotations from the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = annotations[num_detections, 5]
@@ -170,9 +171,9 @@ def evaluate(
 
     # gather all detections and annotations
 
-    all_detections = _get_detections(generator, retinanet, score_threshold=score_threshold,
-                                     max_detections=max_detections)
-    all_annotations = _get_annotations(generator)
+    all_detections = get_detections(generator, retinanet, score_threshold=score_threshold,
+                                    max_detections=max_detections)
+    all_annotations = get_annotations(generator)
     return_list = []
     average_precisions = {}
     print('\nRecall and Precision')
@@ -232,7 +233,7 @@ def evaluate(
         return_list.append((label_name, np.max(recall), np.min(precision)))
 
         # compute average precision
-        average_precision = _compute_ap(recall, precision)
+        average_precision = compute_ap(recall, precision)
         average_precisions[label] = average_precision, num_annotations
 
     print('\nAP:')

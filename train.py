@@ -103,7 +103,6 @@ def main(args=None):
         boat_mAP = checkpoint_dict['boat_mAP']
         buoy_mAP = checkpoint_dict['buoy_mAP']
 
-
     model.training = True
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
     loss_hist = collections.deque(maxlen=500)
@@ -116,7 +115,8 @@ def main(args=None):
         model.train()
         model.module.freeze_bn()
         epoch_loss = []
-        print(get_lr(optimizer))
+        learning_rate = get_lr(optimizer)
+        print(learning_rate)
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
             try:
@@ -166,6 +166,7 @@ def main(args=None):
         writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
         writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
 
+        writer.add_scalar("lr", learning_rate)
         checkpoint = {
             'epoch': curr_epoch + 1,
             'state_dict': model.state_dict(),

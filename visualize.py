@@ -10,10 +10,10 @@ if os.name == 'nt':
     import ctypes
 
     ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
-from network import retinanet
 from torch.utils.data import DataLoader
 from torchvision import transforms
 
+from network import retinanet
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, UnNormalizer, Normalizer
 
 assert torch.__version__.split('.')[0] == '1'
@@ -32,20 +32,20 @@ def main(args=None):
     dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
                              transform=transforms.Compose([Normalizer(), Resizer()]))
 
-    sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
-    dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=collater, batch_sampler=sampler_val)
-    retinanet = retinanet.resnet50(dataset_val.num_classes())
+    #sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
+    #dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=collater, batch_sampler=sampler_val)
+    model = retinanet.resnet50(dataset_val.num_classes())
 
     use_gpu = True
 
     if use_gpu:
-        retinanet = retinanet.cuda()
+        model = model.cuda()
 
-    retinanet = torch.nn.DataParallel(retinanet).cuda()
+    model = torch.nn.DataParallel(model).cuda()
     checkpoint = torch.load(parser.model)
-    retinanet.load_state_dict(checkpoint['state_dict'])
+    model.load_state_dict(checkpoint['state_dict'])
 
-    retinanet.eval()
+    model.eval()
     unnormalize = UnNormalizer()
 
     def draw_caption(image, box, caption):
@@ -54,15 +54,15 @@ def main(args=None):
         cv2.putText(image, caption, (b[0], b[1] - 10), cv2.FONT_HERSHEY_PLAIN, 1, (0, 0, 0), 2)
         cv2.putText(image, caption, (b[0], b[1] - 10), cv2.FONT_HERSHEY_PLAIN, 1, (255, 255, 255), 1)
 
-    for idx, data in enumerate(dataloader_val):
+    for idx, data in enumerate(dataset_val):
         cimg = data['img']
         s = cimg.shape
-        noisy_data = cimg + (0.01 ** 0.5) * torch.randn(s[0], s[1], s[2], s[3])
-        nd = [cimg, noisy_data]
+        #noisy_data = cimg + (0.01 ** 0.5) * torch.randn(s[0], s[1], s[2], s[3])
+        nd = [cimg]
         for ix, d in enumerate(nd):
             with torch.no_grad():
                 st = time.time()
-                scores, classification, transformed_anchors = retinanet(d)
+                scores, classification, transformed_anchors = model(d)
                 print('Elapsed time: {}'.format(time.time() - st))
                 idxs = np.where(scores.cpu() > 0.5)
                 img = np.array(255 * unnormalize(d[0, :, :, :])).copy()
@@ -85,7 +85,7 @@ def main(args=None):
                     label_name = dataset_val.labels[int(classification[idxs[0][j]])]
                     draw_caption(img, (x1, y1, x2, y2), label_name)
                     img = cv2.rectangle(img, (x1, y1), (x2, y2), color=(0, 0, 255), thickness=2)
-                    print(label_name)
+                    print(data)
 
                 # cv2.imshow('img', img)
                 # cv2.waitKey(0)

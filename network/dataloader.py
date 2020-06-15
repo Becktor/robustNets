@@ -297,6 +297,17 @@ class Augmenter(object):
         return sample
 
 
+class Noisyfier(object):
+    def __index__(self):
+        self.noise = torch.empty()
+
+    def __call__(self, sample):
+        img, annots = sample['img'], sample['annot']
+        noise = torch.empty(img.shape).normal_(mean=0, std=0.2).numpy()
+        img = img + noise
+        return {'img': img, 'annot': annots}
+
+
 class Normalizer(object):
 
     def __init__(self):
