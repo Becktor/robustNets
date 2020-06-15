@@ -233,18 +233,22 @@ def main(args=None):
     model.eval()
     dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
                              transform=transforms.Compose([Normalizer(), Resizer()]))
-    noise = 0.2
-    all_detections = get_detections(dataset_val, model, score_threshold=0.3,
-                                    max_detections=100, noise_level=noise)
-    all_annotations = get_annotations(dataset_val)
 
-    hist_class = Hist(all_detections, all_annotations, parser.iouThresh, parser.confThresh)
-    hist_class.run()
-    hist_class.show_hist(3000, name=model_name+'_BB_' + str(noise))
+    noises = [0.0, 0.1, 0.15, 0.2]
+    for noise in noises:
+        print("++++++++++++ noise level at: {} ++++++++++++".format(noise))
+        all_detections = get_detections(dataset_val, model, score_threshold=0.3,
+                                        max_detections=100, noise_level=noise)
+        all_annotations = get_annotations(dataset_val)
 
-    hist_class.show_hist(3000, lbl=0, name=model_name+'_Buoy_' + str(noise))
-    hist_class.show_hist(3000, lbl=1, name=model_name+'_Boat_' + str(noise))
+        hist_class = Hist(all_detections, all_annotations, parser.iouThresh, parser.confThresh)
+        hist_class.run()
+        hist_class.show_hist(3000, name=model_name + '_BB_' + str(noise))
 
+        hist_class.show_hist(3000, lbl=0, name=model_name + '_Buoy_' + str(noise))
+        hist_class.show_hist(3000, lbl=1, name=model_name + '_Boat_' + str(noise))
+        evaluate(dataset_val, model, iou_threshold=0.3, score_threshold=0.3,
+                 detections=all_detections, annotations=all_annotations)
 
 if __name__ == "__main__":
     main()
