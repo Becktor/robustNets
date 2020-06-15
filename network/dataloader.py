@@ -263,11 +263,11 @@ class Resizer(object):
         image = skimage.transform.resize(image, (int(round(rows * scale)), int(round((cols * scale)))))
         rows, cols, cns = image.shape
 
-        #pad_w = 32 - rows % 32
-        #pad_h = 32 - cols % 32
+        pad_w = 32 - rows % 32
+        pad_h = 32 - cols % 32
 
-        #new_image = np.zeros((rows + pad_w, cols + pad_h, cns)).astype(np.float32)
-        #new_image[:rows, :cols, :] = image.astype(np.float32)
+        new_image = np.zeros((rows + pad_w, cols + pad_h, cns)).astype(np.float32)
+        new_image[:rows, :cols, :] = image.astype(np.float32)
 
         annots[:, :4] *= scale
 
