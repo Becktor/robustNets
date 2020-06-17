@@ -20,8 +20,7 @@ from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 
 from network import retinanet
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
-    Normalizer
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Normalizer
 from torch.utils.data import DataLoader
 from network import csv_eval
 from utils import *

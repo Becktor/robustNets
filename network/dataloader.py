@@ -4,7 +4,7 @@ import csv
 import os
 import random
 import sys
-
+import imgaug as iaa
 import numpy as np
 import skimage
 import skimage.color
@@ -160,7 +160,7 @@ class CSVDataset(Dataset):
             except ValueError:
                 raise_from(ValueError(
                     'line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line)),
-                           None)
+                    None)
 
             if img_file not in result:
                 result[img_file] = []
@@ -237,6 +237,19 @@ def collater(data):
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
     return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
+
+
+class AddWeather(object):
+    """Apply weather to input"""
+
+    def __init__(self, aug, weight):
+        self.aug = aug
+        self.weight = weight
+        
+    def __call__(self, sample):
+        image, annots = sample['img'], sample['annot']
+        image = (image * self.weight + self.aug(image=image * 255) / 255) / (self.weight + 1)
+        return {'img': image, 'annot': annots}
 
 
 class Resizer(object):

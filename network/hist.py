@@ -3,13 +3,13 @@ import numpy as np
 import argparse
 import matplotlib.pyplot as plt
 import csv
-
+import imgaug.augmenters as iaa
 from torchvision import transforms
 
 from network.csv_eval import *
 import torch
 
-from network.dataloader import CSVDataset, Normalizer, Resizer
+from network.dataloader import CSVDataset, Normalizer, Resizer, AddWeather
 
 
 def iou(box_a, box_b):
@@ -231,8 +231,9 @@ def main(args=None):
         model = torch.nn.DataParallel(model)
 
     model.eval()
+    seq = iaa.Sequential(iaa.Rain(speed=(0.1,0.2), drop_size=(0.2,0.3)))
     dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                             transform=transforms.Compose([Normalizer(), Resizer()]))
+                             transform=transforms.Compose([AddWeather(seq, weight=2), Normalizer(), Resizer()]))
 
     noises = [0.0, 0.1, 0.15, 0.2]
     for noise in noises:
@@ -249,6 +250,7 @@ def main(args=None):
         hist_class.show_hist(3000, lbl=1, name=model_name + '_Boat_' + str(noise))
         evaluate(dataset_val, model, iou_threshold=0.3, score_threshold=0.3,
                  detections=all_detections, annotations=all_annotations)
+
 
 if __name__ == "__main__":
     main()
