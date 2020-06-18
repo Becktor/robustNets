@@ -44,14 +44,14 @@ def main(args=None):
     parser = parser.parse_args(args)
 
     dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes,
-                               transform=transforms.Compose([Normalizer(), Augmenter(), Resizer()]))
+                               transform=transforms.Compose([Augmenter(), Resizer()]))
 
     if parser.csv_val is None:
         dataset_val = None
         print('No validation annotations provided.')
     else:
         dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                 transform=transforms.Compose([Normalizer(), Resizer()]))
+                                 transform=transforms.Compose([Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
@@ -106,7 +106,7 @@ def main(args=None):
 
 
     model.training = True
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 100000)# patience=2, verbose=True)
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.module.freeze_bn()
