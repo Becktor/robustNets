@@ -58,7 +58,7 @@ def _compute_ap(recall, precision):
     return ap
 
 
-def _get_detections(dataset, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
+def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
     """ Get the detections from the network using the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = detections[num_detections, 4 + num_classes]
@@ -123,7 +123,7 @@ def _get_detections(dataset, model, score_threshold=0.05, max_detections=100, no
     return all_detections
 
 
-def _get_annotations(generator):
+def get_annotations(generator):
     """ Get the ground truth annotations from the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = annotations[num_detections, 5]
@@ -150,16 +150,18 @@ def _get_annotations(generator):
 
 def evaluate(
         generator,
-        retinanet,
+        model,
         iou_threshold=0.5,
         score_threshold=0.05,
         max_detections=100,
-        save_path=None
+        save_path=None,
+        detections=None,
+        annotations=None
 ):
     """ Evaluate a given dataset using a given network.
     # Arguments
         generator       : The generator that represents the dataset to evaluate.
-        network           : The network to evaluate.
+        model           : The network to evaluate.
         iou_threshold   : The threshold used to consider when a detection is positive or negative.
         score_threshold : The score confidence threshold to use for detections.
         max_detections  : The maximum number of detections to use per image.
@@ -169,10 +171,14 @@ def evaluate(
     """
 
     # gather all detections and annotations
+    if not detections:
+        all_detections = get_detections(generator, model, score_threshold=score_threshold,
+                                        max_detections=max_detections)
+        all_annotations = get_annotations(generator)
+    else:
+        all_detections = detections
+        all_annotations = annotations
 
-    all_detections = _get_detections(generator, retinanet, score_threshold=score_threshold,
-                                     max_detections=max_detections)
-    all_annotations = _get_annotations(generator)
     return_list = []
     average_precisions = {}
     print('\nRecall and Precision')
@@ -227,9 +233,10 @@ def evaluate(
         precision = true_positives / np.maximum(true_positives + false_positives, np.finfo(np.float64).eps)
         label_name = generator.label_to_name(label)
         print(label_name)
-        print("Recall: {}".format(np.max(recall)))
-        print("Precision: {}".format(np.min(precision)))
-        return_list.append((label_name, np.max(recall), np.min(precision)))
+        print("Recall: {}".format(max(recall, default=float('NaN'))))
+        print("Precision: {}".format(min(precision, default=float('NaN'))))
+
+        return_list.append((label_name, max(recall, default=float('NaN')), min(precision, default=float('NaN'))))
 
         # compute average precision
         average_precision = _compute_ap(recall, precision)
@@ -243,5 +250,6 @@ def evaluate(
         print('{}: {}'.format(label_name, average_precisions[label][0]))
         return_list.append((label_name, average_precisions[label][0]))
     print('\nmAP: {}'.format(np.mean(map_list)))
+    return_list.append(np.mean(map_list))
     print('')
     return average_precisions, return_list
