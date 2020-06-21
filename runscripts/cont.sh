@@ -29,4 +29,4 @@
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/mmdet/fix_annotations_rgb_train.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --batch_size 1 --continue_training /work1/jbibe/git/robustNets/trained_models/model157_1145
+python train.py --csv_train /work1/jbibe/mmdet/fix_annotations_rgb_train.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --batch_size 2 --continue_training /work1/jbibe/git/robustNets/trained_models/model170_1537
