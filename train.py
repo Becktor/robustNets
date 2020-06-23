@@ -85,7 +85,7 @@ def main(args=None):
     boat_mAP = 0
     buoy_mAP = 0
     model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    optimizer = optim.Adam(model.parameters(), lr=1e-5)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -106,7 +106,7 @@ def main(args=None):
 
 
     model.training = True
-    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 100000)# patience=2, verbose=True)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 100)# patience=2, verbose=True)
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.module.freeze_bn()
