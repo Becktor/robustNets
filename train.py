@@ -20,7 +20,8 @@ from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 
 from network import retinanet
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Normalizer
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
+    Normalizer
 from torch.utils.data import DataLoader
 from network import csv_eval
 from utils import *
@@ -83,7 +84,7 @@ def main(args=None):
     prev_epoch = 0
     mAP = 0
     model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.parameters(), lr=1e-4)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -102,7 +103,7 @@ def main(args=None):
         mAP = checkpoint_dict['mAP']
 
     model.training = True
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 100)
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.module.freeze_bn()
@@ -113,8 +114,8 @@ def main(args=None):
         model.train()
         model.module.freeze_bn()
         epoch_loss = []
-        curr_lr = get_lr(optimizer)
-        print(curr_lr)
+        lr = get_lr(optimizer)
+        print(lr)
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
             try:
@@ -155,35 +156,36 @@ def main(args=None):
 
         # Write to Tensorboard
         writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
-        writer.add_scalar("ap/Buoy", rl[2][1], curr_epoch)
-        writer.add_scalar("ap/Boat", rl[3][1], curr_epoch)
-        writer.add_scalar("ap/mAP", rl[4], curr_epoch)
+
+        writer.add_scalar("mAP/AP_Buoy", rl[2][1], curr_epoch)
+        writer.add_scalar("mAP/AP_Boat", rl[3][1], curr_epoch)
+        writer.add_scalar("mAP/mAP", rl[4], curr_epoch)
+        writer.add_scalar("lr/Learning Rate", lr, curr_epoch)
+
         writer.add_scalar("val/Buoy_Precision", rl[0][2], curr_epoch)
         writer.add_scalar("val/Buoy_Recall", rl[0][1], curr_epoch)
+
         writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
         writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
-
-        writer.add_scalar("lr/LearningRate", curr_lr, curr_epoch)
 
         checkpoint = {
             'epoch': curr_epoch + 1,
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
-            'buoy_AP': rl[2][1],
-            'boat_AP': rl[3][1],
+            'buoy_mAP': rl[2][1],
+            'boat_mAP': rl[3][1],
             'mAP': rl[4]
         }
 
         if rl[4] > mAP:
-            boat_mAP = rl[3][1]
-            buoy_mAP = rl[2][1]
             save_ckp(checkpoint, model.module, True, checkpoint_dir, curr_epoch)
         else:
             save_ckp(checkpoint, model.module, False, checkpoint_dir, curr_epoch)
 
         loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
-        loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
-                                                                  rl[0], rl[1], rl[2], rl[3], buoy_mAP, boat_mAP))
+        loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
+                                                                      rl[0], rl[1], rl[2], rl[3],
+                                                                      rl[2][1], rl[3][1], rl[4]))
         loss_file.close()
 
     model.eval()
