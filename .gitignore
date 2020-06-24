@@ -3,6 +3,8 @@
 trained_models/
 .idea/
 figures/
+network/*.png
+network/*.txt
 #file
 *.pth
 *.csv
