@@ -2,6 +2,7 @@ from __future__ import print_function
 
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
 
 
 def compute_overlap(a, b):
@@ -31,7 +32,7 @@ def compute_overlap(a, b):
     return intersection / ua
 
 
-def _compute_ap(recall, precision):
+def _compute_ap(recall, precision, noise=0, label="", plot=False):
     """ Compute the average precision, given the recall and precision curves.
     Code originally from https://github.com/rbgirshick/py-faster-rcnn.
     # Arguments
@@ -43,7 +44,24 @@ def _compute_ap(recall, precision):
     # correct AP calculation
     # first append sentinel values at the end
     mrec = np.concatenate(([0.], recall, [1.]))
-    mpre = np.concatenate(([0.], precision, [0.]))
+    mpre = np.concatenate(([1.], precision, [0.]))
+
+    if plot:
+        # Plot pres vs recall
+        fig = plt.figure(figsize=(4, 4))
+        ax = fig.add_subplot(111)
+        label_str = "Buoy" if label == 0 else "Boat"
+        ax.set_title("AP of {} with noise {}".format(label_str, noise), loc='center', y=1.07)
+        ax.set_ylabel('Precision')
+        ax.set_xlabel('Recall')
+        minval = np.min(mpre[np.nonzero(mpre)])
+        ax.set_ylim([minval-0.05, 1.01])
+        ax.minorticks_on()
+        ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black', alpha=0.5)
+        ax.grid(which='major', linestyle='-', linewidth='0.5', color='black', alpha=0.5)
+        ax.plot(mrec, mpre)
+        fig.tight_layout()
+        fig.savefig("../figures/l_{}_n_{}_ap.png".format(label_str, noise))
 
     # compute the precision envelope
     for i in range(mpre.size - 1, 0, -1):
@@ -82,8 +100,8 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
             scale = data['scale']
             img = data['img']
 
-            if noise_level > 0:
-                img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
+            # if noise_level > 0:
+            #   img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
 
             # run network
             scores, labels, boxes = model(img.permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
@@ -154,9 +172,11 @@ def evaluate(
         iou_threshold=0.5,
         score_threshold=0.05,
         max_detections=100,
+        noise=0,
         save_path=None,
         detections=None,
-        annotations=None
+        annotations=None,
+        f=None,
 ):
     """ Evaluate a given dataset using a given network.
     # Arguments
@@ -181,7 +201,8 @@ def evaluate(
 
     return_list = []
     average_precisions = {}
-    print('\nRecall and Precision')
+    conf_matrix = {}
+    print('\nRecall and Precision', file=f)
     for label in range(generator.num_classes()):
         false_positives = np.zeros((0,))
         true_positives = np.zeros((0,))
@@ -233,23 +254,22 @@ def evaluate(
         precision = true_positives / np.maximum(true_positives + false_positives, np.finfo(np.float64).eps)
         label_name = generator.label_to_name(label)
         print(label_name)
-        print("Recall: {}".format(max(recall, default=float('NaN'))))
-        print("Precision: {}".format(min(precision, default=float('NaN'))))
-
+        print("Recall: {}".format(max(recall, default=float('NaN'))), file=f)
+        print("Precision: {}".format(min(precision, default=float('NaN'))), file=f)
         return_list.append((label_name, max(recall, default=float('NaN')), min(precision, default=float('NaN'))))
 
         # compute average precision
-        average_precision = _compute_ap(recall, precision)
+        average_precision = _compute_ap(recall, precision, noise=noise, label=label, plot=True)
         average_precisions[label] = average_precision, num_annotations
 
-    print('\nAP:')
+    print('\nAP:', file=f)
     map_list = []
     for label in range(generator.num_classes()):
         label_name = generator.label_to_name(label)
         map_list.append(average_precisions[label][0])
-        print('{}: {}'.format(label_name, average_precisions[label][0]))
+        print('{}: {}'.format(label_name, average_precisions[label][0]), file=f)
         return_list.append((label_name, average_precisions[label][0]))
-    print('\nmAP: {}'.format(np.mean(map_list)))
+    print('\nmAP: {}'.format(np.mean(map_list)), file=f)
     return_list.append(np.mean(map_list))
-    print('')
+    print('-----------------------------', file=f)
     return average_precisions, return_list

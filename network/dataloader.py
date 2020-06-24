@@ -4,7 +4,7 @@ import csv
 import os
 import random
 import sys
-import imgaug as iaa
+import imgaug.augmenters as iaa
 import numpy as np
 import skimage
 import skimage.color
@@ -239,17 +239,87 @@ def collater(data):
     return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
 
 
+class Gaussian(object):
+    def __init__(self, noise_level):
+        self.noise_level = noise_level
+
+    def __call__(self, sample):
+        image, annots = sample['img'], sample['annot']
+        if self.noise_level > 0:
+            image = image + torch.empty(image.shape).normal_(mean=0, std=self.noise_level).numpy()
+            image = np.clip(0, 1, image)
+        #temp_img = (image * 255).astype(np.uint8)
+        #Image.fromarray(temp_img).save("noisy.png")
+        return {'img': image.astype(np.float32), 'annot': annots}
+
+
+class GaussianBlur(object):
+
+    def __init__(self, level):
+        self.level = level
+        self.blur = iaa.Sequential(iaa.blur.GaussianBlur(level))
+
+    def __call__(self, sample):
+        image, annots = sample['img'], sample['annot']
+        if self.level <= 0:
+            return {'img': image, 'annot': annots}
+        uint8_image = (image * 255).astype(np.uint8)
+        #Image.fromarray(uint8_image).save("Blur_inp.png")
+        aug_image = self.blur(image=uint8_image)
+        #Image.fromarray(aug_image).save("Blur_aug.png")
+        image = aug_image.astype(np.float) / 255
+        image = np.clip(0, 1, image)
+        return {'img': image.astype(np.float32), 'annot': annots}
+
+
+class SAP(object):
+    """salt & pepper to input"""
+
+    def __init__(self, percentage, channel_wise=False):
+        self.per = percentage
+        self.sap = iaa.Sequential(iaa.SaltAndPepper(percentage), channel_wise)
+
+    def __call__(self, sample):
+        image, annots = sample['img'], sample['annot']
+        if self.per <= 0:
+            return {'img': image, 'annot': annots}
+        uint8_image = (image * 255).astype(np.uint8)
+        #Image.fromarray(uint8_image).save("SP_inp.png")
+        aug_image = self.sap(image=uint8_image)
+        #Image.fromarray(aug_image).save("SP_aug.png")
+        image = aug_image.astype(np.float) / 255
+        image = np.clip(0, 1, image)
+        return {'img': image.astype(np.float32), 'annot': annots}
+
+
 class AddWeather(object):
     """Apply weather to input"""
 
     def __init__(self, aug, weight):
         self.aug = aug
+        max_weight = 3
         self.weight = weight
-        
+        if max_weight < weight:
+            self.weight = 0
+        elif weight < 0:
+            self.weight = -1
+        else:
+            self.weight = 3 - weight
+
     def __call__(self, sample):
         image, annots = sample['img'], sample['annot']
-        image = (image * self.weight + self.aug(image=image * 255) / 255) / (self.weight + 1)
-        return {'img': image, 'annot': annots}
+        if self.weight < 0:
+            return {'img': image, 'annot': annots}
+        uint8_image = (image * 255).astype(np.uint8)
+        # Image.fromarray(uint8_image).save("inp.png")
+        aug_image = self.aug(image=uint8_image)
+        # Image.fromarray(aug_image).save("aug.png")
+        norm_aug_img = aug_image.astype(np.float) / 255
+        image = (image * self.weight + norm_aug_img) / (self.weight + 1)
+        image = np.clip(0, 1, image)
+        # temp_img = (image * 255).astype(np.uint8)
+        # Image.fromarray(temp_img).save("noisy.png")
+        return {'img': image.astype(np.float32), 'annot': annots}
 
 
 class Resizer(object):

@@ -7,7 +7,7 @@ import numpy as np
 
 import torch
 
-from network.activations import GroupSort
+from network.activations import GroupSort, MaxMin
 from network.layers.bjork_conv2d import BjorckConv2d
 
 if os.name == 'nt':
@@ -69,7 +69,7 @@ def main(args=None):
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=GroupSort(2, axis=1), spectral_norm=True)
+                                   act=MaxMin(2, axis=1), spectral_norm=True)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -81,8 +81,7 @@ def main(args=None):
     if use_gpu:
         model = model.cuda()
     prev_epoch = 0
-    boat_mAP = 0
-    buoy_mAP = 0
+    mAP = 0
     model = torch.nn.DataParallel(model).cuda()
     optimizer = optim.Adam(model.parameters(), lr=1e-3)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
@@ -100,9 +99,7 @@ def main(args=None):
         checkpoint_dir = parser.continue_training
         writer = SummaryWriter(checkpoint_dir + "/tb_event")
         prev_epoch = checkpoint_dict['epoch']
-        boat_mAP = checkpoint_dict['boat_mAP']
-        buoy_mAP = checkpoint_dict['buoy_mAP']
-
+        mAP = checkpoint_dict['mAP']
 
     model.training = True
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
@@ -116,7 +113,8 @@ def main(args=None):
         model.train()
         model.module.freeze_bn()
         epoch_loss = []
-        print(get_lr(optimizer))
+        curr_lr = get_lr(optimizer)
+        print(curr_lr)
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
             try:
@@ -151,31 +149,32 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
+            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.7)
 
         scheduler.step(np.mean(epoch_loss))
 
         # Write to Tensorboard
         writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
-        writer.add_scalar("val/mAP_Buoy", rl[2][1], curr_epoch)
-        writer.add_scalar("val/mAP_Boat", rl[3][1], curr_epoch)
-
+        writer.add_scalar("ap/Buoy", rl[2][1], curr_epoch)
+        writer.add_scalar("ap/Boat", rl[3][1], curr_epoch)
+        writer.add_scalar("ap/mAP", rl[4], curr_epoch)
         writer.add_scalar("val/Buoy_Precision", rl[0][2], curr_epoch)
         writer.add_scalar("val/Buoy_Recall", rl[0][1], curr_epoch)
-
         writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
         writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
+
+        writer.add_scalar("lr/LearningRate", curr_lr, curr_epoch)
 
         checkpoint = {
             'epoch': curr_epoch + 1,
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
-            'buoy_mAP': rl[2][1],
-            'boat_mAP': rl[3][1],
+            'buoy_AP': rl[2][1],
+            'boat_AP': rl[3][1],
             'mAP': rl[4]
         }
 
-        if (rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP) or rl[2][1] > buoy_mAP:
+        if rl[4] > mAP:
             boat_mAP = rl[3][1]
             buoy_mAP = rl[2][1]
             save_ckp(checkpoint, model.module, True, checkpoint_dir, curr_epoch)
