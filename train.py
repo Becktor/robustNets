@@ -70,7 +70,7 @@ def main(args=None):
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=GroupSort(2, axis=1), spectral_norm=True)
+                                   act=GroupSort(2, axis=1), spectral_norm=False)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -106,7 +106,7 @@ def main(args=None):
 
 
     model.training = True
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=3, verbose=True)
+    scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 100)# patience=2, verbose=True)
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.module.freeze_bn()
@@ -152,7 +152,7 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
+            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.5)
 
         scheduler.step(np.mean(epoch_loss))
 
@@ -172,8 +172,7 @@ def main(args=None):
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
             'buoy_mAP': rl[2][1],
-            'boat_mAP': rl[3][1],
-            'mAP': rl[4]
+            'boat_mAP': rl[3][1]
         }
 
         if (rl[3][1] > boat_mAP and rl[2][1] > buoy_mAP) or rl[2][1] > buoy_mAP:
