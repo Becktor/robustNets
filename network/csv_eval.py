@@ -89,13 +89,13 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
     # Returns
         A list of lists containing the detections for each image in the generator.
     """
-    all_detections = [[None for i in range(dataset.num_classes())] for j in range(10)]# len(dataset))]
+    all_detections = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
 
     model.eval()
 
     with torch.no_grad():
 
-        for index in range(10):#, len( dataset)):
+        for index in range(len( dataset)):
             data = dataset[index]
             scale = data['scale']
             img = data['img']
@@ -150,9 +150,9 @@ def get_annotations(generator):
     # Returns
         A list of lists containing the annotations for each image in the generator.
     """
-    all_annotations = [[None for i in range(generator.num_classes())] for j in range(10)]#900,len(generator))]
+    all_annotations = [[None for i in range(generator.num_classes())] for j in range(len(generator))]
 
-    for i in range(10):#, len(generator)):
+    for i in range(len(generator)):
         # load the annotations
         img = generator.load_image(i)
         annotations = generator.load_annotations(i, img.shape)
@@ -210,7 +210,7 @@ def evaluate(
         scores = np.zeros((0,))
         num_annotations = 0.0
 
-        for i in range(10):#len(generator)):
+        for i in range(len(generator)):
             detections = all_detections[i][label]
             annotations = all_annotations[i][label]
             num_annotations += annotations.shape[0]

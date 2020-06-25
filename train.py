@@ -118,8 +118,7 @@ def main(args=None):
         print(lr)
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
-            if iter_num % 10:
-                break
+
             try:
                 optimizer.zero_grad()
                 classification_loss, regression_loss = model([data['img'].cuda().float(), data['annot']])
@@ -152,7 +151,7 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.7)
+            _ap, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.7)
 
         scheduler.step(np.mean(epoch_loss))
 
