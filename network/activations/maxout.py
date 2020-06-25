@@ -4,9 +4,9 @@ from network.activations.base_activation import Activation
 
 
 class Maxout(Activation):
-    def __init__(self, num_units, axis=-1):
+    def __init__(self, axis=-1):
         super(Maxout, self).__init__()
-        self.num_units = num_units
+
         self.axis = axis
 
     def forward(self, x):
@@ -18,14 +18,14 @@ class Maxout(Activation):
 
 class MaxMin(Activation):
 
-    def __init__(self, num_units, axis=-1):
+    def __init__(self, axis=-1):
         super(MaxMin, self).__init__()
-        self.num_units = num_units
         self.axis = axis
 
     def forward(self, x):
-        maxes = maxout(x, self.num_units, self.axis)
-        mins = minout(x, self.num_units, self.axis)
+        num_units = int(x.size()[self.axis]/2)
+        maxes = maxout(x, num_units, self.axis)
+        mins = minout(x, num_units, self.axis)
         maxmin = torch.cat((maxes, mins), dim=1)
         return maxmin
 

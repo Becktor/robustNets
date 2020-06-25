@@ -70,7 +70,7 @@ def main(args=None):
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=MaxMin(2, axis=1), spectral_norm=True)
+                                   act=MaxMin(axis=1), spectral_norm=True)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
