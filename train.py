@@ -118,6 +118,8 @@ def main(args=None):
         print(lr)
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
+            if iter_num % 10:
+                break
             try:
                 optimizer.zero_grad()
                 classification_loss, regression_loss = model([data['img'].cuda().float(), data['annot']])
@@ -157,23 +159,24 @@ def main(args=None):
         # Write to Tensorboard
         writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
 
+        writer.add_scalar("val/Buoy_Recall", rl[0][1], curr_epoch)
+        writer.add_scalar("val/Buoy_Precision", rl[0][2], curr_epoch)
+
+        writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
+        writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
+
         writer.add_scalar("mAP/AP_Buoy", rl[2][1], curr_epoch)
         writer.add_scalar("mAP/AP_Boat", rl[3][1], curr_epoch)
         writer.add_scalar("mAP/mAP", rl[4], curr_epoch)
+
         writer.add_scalar("lr/Learning Rate", lr, curr_epoch)
-
-        writer.add_scalar("val/Buoy_Precision", rl[0][2], curr_epoch)
-        writer.add_scalar("val/Buoy_Recall", rl[0][1], curr_epoch)
-
-        writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
-        writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
 
         checkpoint = {
             'epoch': curr_epoch + 1,
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
-            'buoy_mAP': rl[2][1],
-            'boat_mAP': rl[3][1],
+            'buoy_AP': rl[2][1],
+            'boat_AP': rl[3][1],
             'mAP': rl[4]
         }
 
