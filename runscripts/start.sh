@@ -3,7 +3,7 @@
 ### -- specify queue --
 #BSUB -q gpuv100
 ### -- set the job Name --
-#BSUB -J gs2 
+#BSUB -J maxmin
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 2
 ### -- Select the resources: 1 gpu in exclusive process mode --
@@ -22,8 +22,8 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o spectral_gs2.out
-#BSUB -e spectral_gs2.err
+#BSUB -o maxmin.out
+#BSUB -e maxmin.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
