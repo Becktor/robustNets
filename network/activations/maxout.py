@@ -6,7 +6,6 @@ from network.activations.base_activation import Activation
 class Maxout(Activation):
     def __init__(self, axis=-1):
         super(Maxout, self).__init__()
-
         self.axis = axis
 
     def forward(self, x):

@@ -89,13 +89,13 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
     # Returns
         A list of lists containing the detections for each image in the generator.
     """
-    all_detections = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
+    all_detections = [[None for i in range(dataset.num_classes())] for j in range(10)]# len(dataset))]
 
     model.eval()
 
     with torch.no_grad():
 
-        for index in range(len(dataset)):
+        for index in range(10):#, len( dataset)):
             data = dataset[index]
             scale = data['scale']
             img = data['img']
@@ -150,9 +150,9 @@ def get_annotations(generator):
     # Returns
         A list of lists containing the annotations for each image in the generator.
     """
-    all_annotations = [[None for i in range(generator.num_classes())] for j in range(len(generator))]
+    all_annotations = [[None for i in range(generator.num_classes())] for j in range(10)]#900,len(generator))]
 
-    for i in range(len(generator)):
+    for i in range(10):#, len(generator)):
         # load the annotations
         img = generator.load_image(i)
         annotations = generator.load_annotations(i, img.shape)
@@ -177,6 +177,7 @@ def evaluate(
         detections=None,
         annotations=None,
         f=None,
+        plot=False
 ):
     """ Evaluate a given dataset using a given network.
     # Arguments
@@ -199,7 +200,7 @@ def evaluate(
         all_detections = detections
         all_annotations = annotations
 
-    return_list = []
+    return_list = {0:(0,0,0), 1:(0,0,0), 2:(0,0), 3:(0,0), 4:0}
     average_precisions = {}
     conf_matrix = {}
     print('\nRecall and Precision', file=f)
@@ -209,7 +210,7 @@ def evaluate(
         scores = np.zeros((0,))
         num_annotations = 0.0
 
-        for i in range(len(generator)):
+        for i in range(10):#len(generator)):
             detections = all_detections[i][label]
             annotations = all_annotations[i][label]
             num_annotations += annotations.shape[0]
@@ -256,10 +257,10 @@ def evaluate(
         print(label_name)
         print("Recall: {}".format(max(recall, default=float('NaN'))), file=f)
         print("Precision: {}".format(min(precision, default=float('NaN'))), file=f)
-        return_list.append((label_name, max(recall, default=float('NaN')), min(precision, default=float('NaN'))))
+        return_list[label] = (label_name, max(recall, default=float('NaN')), min(precision, default=float('NaN')))
 
         # compute average precision
-        average_precision = _compute_ap(recall, precision, noise=noise, label=label, plot=True)
+        average_precision = _compute_ap(recall, precision, noise=noise, label=label, plot=plot)
         average_precisions[label] = average_precision, num_annotations
 
     print('\nAP:', file=f)
@@ -268,8 +269,8 @@ def evaluate(
         label_name = generator.label_to_name(label)
         map_list.append(average_precisions[label][0])
         print('{}: {}'.format(label_name, average_precisions[label][0]), file=f)
-        return_list.append((label_name, average_precisions[label][0]))
+        return_list[2+label] = (label_name, average_precisions[label][0])
     print('\nmAP: {}'.format(np.mean(map_list)), file=f)
-    return_list.append(np.mean(map_list))
+    return_list[4] = np.mean(map_list)
     print('-----------------------------', file=f)
     return average_precisions, return_list
