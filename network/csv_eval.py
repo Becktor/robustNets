@@ -51,11 +51,16 @@ def _compute_ap(recall, precision, noise=0, label="", plot=False):
         fig = plt.figure(figsize=(4, 4))
         ax = fig.add_subplot(111)
         label_str = "Buoy" if label == 0 else "Boat"
-        ax.set_title("AP of {} with noise {}".format(label_str, noise), loc='center', y=1.07)
+        if noise <=0.0:
+            ax.set_title("Precision-Recall curve of {}".format(label_str, noise), loc='center', y=1.07)
+        else:
+            ax.set_title("Precision-Recall curve of {} with noise {}".format(label_str, noise), loc='center', y=1.07)
+
         ax.set_ylabel('Precision')
         ax.set_xlabel('Recall')
         minval = np.min(mpre[np.nonzero(mpre)])
-        ax.set_ylim([minval-0.05, 1.01])
+        ax.set_ylim([0.88, 1.01])
+        ax.set_xlim([0.0, 1.0])
         ax.minorticks_on()
         ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black', alpha=0.5)
         ax.grid(which='major', linestyle='-', linewidth='0.5', color='black', alpha=0.5)

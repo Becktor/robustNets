@@ -286,7 +286,7 @@ class SAP(object):
         uint8_image = (image * 255).astype(np.uint8)
         #Image.fromarray(uint8_image).save("SP_inp.png")
         aug_image = self.sap(image=uint8_image)
-        #Image.fromarray(aug_image).save("SP_aug.png")
+        Image.fromarray(aug_image).save("SP_aug.png")
         image = aug_image.astype(np.float) / 255
         image = np.clip(0, 1, image)
         return {'img': image.astype(np.float32), 'annot': annots}
