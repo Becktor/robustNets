@@ -3,7 +3,7 @@
 ### -- specify queue --
 #BSUB -q gpuv100
 ### -- set the job Name --
-#BSUB -J gs2 
+#BSUB -J maxmin
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 2
 ### -- Select the resources: 1 gpu in exclusive process mode --
@@ -22,11 +22,11 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o spectral_gs2.out
-#BSUB -e spectral_gs2.err
+#BSUB -o maxmin.out
+#BSUB -e maxmin.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/mmdet/fix_annotations_rgb_train.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --batch_size 4 --continue_training /work1/jbibe/git/robustNet/trained_models/model...
+python train.py --csv_train /work1/jbibe/mmdet/fix_annotations_rgb_train.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --batch_size 2 --continue_training /work1/jbibe/git/robustNets/trained_models/model177_1442
