@@ -236,12 +236,12 @@ def main(args=None):
     for weight in weights:
         #seq = iaa.Sequential(iaa.Rain(drop_size=weight), seed=1)
 
-        #noises = [0.0001, 0.0005, 0.001] #Gaussian salt/pepper
+        noises = [0.0001, 0.0005, 0.001] #Gaussian salt/pepper
         #noises = [1, 1.5, 2]
-        noises = [0.025, 0.05, 0.075]
+        #noises = [0.0, 0.025, 0.05, 0.075]
         for noise in noises:
             dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                     transform=transforms.Compose([Gaussian(noise), Resizer()]))
+                                     transform=transforms.Compose([SAP(noise), Resizer()]))
 
             print("++++++++++++ noise level at: {} weight: {} ++++++++++++".format(noise, weight))
             all_detections = get_detections(dataset_val, model, score_threshold=parser.confThresh,
