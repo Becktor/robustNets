@@ -8,6 +8,8 @@ import numpy as np
 import torch
 
 from network.activations import GroupSort, MaxMin
+from network.layers import bcop
+from network.layers.bcop import BCOP
 from network.layers.bjork_conv2d import BjorckConv2d
 
 if os.name == 'nt':
@@ -34,9 +36,9 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
-    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
+    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=1)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -65,12 +67,13 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
+                                   act=GroupSort(2, axis=1, new_impl=True), conv=BCOP, spectral_norm=False)
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
         model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=MaxMin(axis=1), spectral_norm=True)
+                                   act=GroupSort(2, axis=1, new_impl=True), conv=BCOP, spectral_norm=False)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:

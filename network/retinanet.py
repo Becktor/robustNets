@@ -27,34 +27,35 @@ class PyramidFeatures(nn.Module):
         super(PyramidFeatures, self).__init__()
 
         # upsample C5 to get P5 from the FPN paper
-        self.P5_1 = conv(C5_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P5_1 = nn.utils.spectral_norm(self.P5_1)
+        self.P5_1 = conv(C5_size, feature_size, kernel_size=1, stride=1, padding=None)
+        #self.P5_1 = nn.utils.spectral_norm(self.P5_1)
         self.P5_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
         self.P5_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-        self.P5_2 = nn.utils.spectral_norm(self.P5_2)
+        #self.P5_2 = nn.utils.spectral_norm(self.P5_2)
 
         # add P5 elementwise to C4
-        self.P4_1 = conv(C4_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P4_1 = nn.utils.spectral_norm(self.P4_1)
+        self.P4_1 = conv(C4_size, feature_size, kernel_size=1, stride=1, padding=None)
+        #self.P4_1 = nn.utils.spectral_norm(self.P4_1)
 
         self.P4_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
         self.P4_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-        self.P4_2 = nn.utils.spectral_norm(self.P4_2)
+        #self.P4_2 = nn.utils.spectral_norm(self.P4_2)
 
         # add P4 elementwise to C3
-        self.P3_1 = conv(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P3_1 = nn.utils.spectral_norm(self.P3_1)
+        self.P3_1 = conv(C3_size, feature_size, kernel_size=2, stride=1, padding=None)
+        #self.P3_1 = nn.utils.spectral_norm(self.P3_1)
         self.P3_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-        self.P3_2 = nn.utils.spectral_norm(self.P3_2)
+        #self.P3_2 = nn.utils.spectral_norm(self.P3_2)
 
         # "P6 is obtained via a 3x3 stride-2 conv on C5"
-        self.P6 = conv(C5_size, feature_size, kernel_size=3, stride=2, padding=1)
-        self.P6 = nn.utils.spectral_norm(self.P6)
+        self.P6 = conv(C5_size, feature_size, kernel_size=3, stride=1, padding=1)
+        self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
+        #self.P6 = nn.utils.spectral_norm(self.P6)
 
         # "P7 is computed by applying ReLU followed by a 3x3 stride-2 conv on P6"
         self.P7_1 = act  # GroupSort(2,axis=1)
-        self.P7_2 = conv(feature_size, feature_size, kernel_size=3, stride=2, padding=1)
-        self.P7_2 = nn.utils.spectral_norm(self.P7_2)
+        self.P7_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
+        #self.P7_2 = nn.utils.spectral_norm(self.P7_2)
 
     def forward(self, inputs):
         C3, C4, C5 = inputs
@@ -73,9 +74,11 @@ class PyramidFeatures(nn.Module):
         P3_x = self.P3_2(P3_x)
 
         P6_x = self.P6(C5)
+        P6_x = self.maxpool(P6_x)
 
         P7_x = self.P7_1(P6_x)
         P7_x = self.P7_2(P7_x)
+        P7_x = self.maxpool(P7_x)
 
         return [P3_x, P4_x, P5_x, P6_x, P7_x]
 
@@ -85,19 +88,19 @@ class RegressionModel(nn.Module):
         super(RegressionModel, self).__init__()
 
         self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
-        self.conv1 = nn.utils.spectral_norm(self.conv1)
+        #self.conv1 = nn.utils.spectral_norm(self.conv1)
         self.act1 = act
 
         self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv2 = nn.utils.spectral_norm(self.conv2)
+        #self.conv2 = nn.utils.spectral_norm(self.conv2)
         self.act2 = act
 
         self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv3 = nn.utils.spectral_norm(self.conv3)
+        #self.conv3 = nn.utils.spectral_norm(self.conv3)
         self.act3 = act
 
         self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv4 = nn.utils.spectral_norm(self.conv4)
+        #self.conv4 = nn.utils.spectral_norm(self.conv4)
         self.act4 = act
 
         self.output = conv(feature_size, num_anchors * 4, kernel_size=3, padding=1)
@@ -129,18 +132,18 @@ class ClassificationModel(nn.Module):
         self.num_anchors = num_anchors
 
         self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
-        self.conv1 = nn.utils.spectral_norm(self.conv1)
+        #self.conv1 = nn.utils.spectral_norm(self.conv1)
         self.act1 = act
         self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv2 = nn.utils.spectral_norm(self.conv2)
+        #self.conv2 = nn.utils.spectral_norm(self.conv2)
         self.act2 = act
 
         self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv3 = nn.utils.spectral_norm(self.conv3)
+        #self.conv3 = nn.utils.spectral_norm(self.conv3)
         self.act3 = act
 
         self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv4 = nn.utils.spectral_norm(self.conv4)
+        #self.conv4 = nn.utils.spectral_norm(self.conv4)
         self.act4 = act
 
         self.output = conv(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
@@ -176,13 +179,13 @@ class ResNet(nn.Module):
         self.inplanes = 64
         super(ResNet, self).__init__()
         self.spectral_norm = spectral_norm
-        self.conv1 = conv(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = conv(3, 64, kernel_size=7, stride=1, padding=3, bias=False)
         self.act = act
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
+        self.layer1 = self._make_layer(block, 64, layers[0], act=act, conv=conv)
+        self.layer2 = self._make_layer(block, 128, layers[1], stride=2, act=act, conv=conv)
+        self.layer3 = self._make_layer(block, 256, layers[2], stride=2, act=act,  conv=conv)
+        self.layer4 = self._make_layer(block, 512, layers[3], stride=2, act=act,conv=conv)
         if self.spectral_norm:
             self.conv1 = nn.utils.spectral_norm(self.conv1)
         else:
@@ -209,21 +212,21 @@ class ResNet(nn.Module):
 
         self.focalLoss = losses.FocalLoss()
 
-        for m in self.modules():
-            if isinstance(m, conv):
-                n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
-                m.weight.data.fill_(1)
-                m.bias.data.zero_()
+        #for m in self.modules():
+            #if isinstance(m, conv):
+                #n = m.kernel_size * m.kernel_size * m.out_channels ## fix if you go back from bcop
+                #m.weight.data.normal_(0, math.sqrt(2. / n))
+            #elif isinstance(m, nn.BatchNorm2d):
+                #m.weight.data.fill_(1)
+                #m.bias.data.zero_()
 
         prior = 0.01
 
-        self.classificationModel.output.weight.data.fill_(0)
-        self.classificationModel.output.bias.data.fill_(-math.log((1.0 - prior) / prior))
+        #self.classificationModel.output.weight.data.fill_(0)
+        #self.classificationModel.output.bias.data.fill_(-math.log((1.0 - prior) / prior))
 
-        self.regressionModel.output.weight.data.fill_(0)
-        self.regressionModel.output.bias.data.fill_(0)
+        #self.regressionModel.output.weight.data.fill_(0)
+        #self.regressionModel.output.bias.data.fill_(0)
 
         self.freeze_bn()
 
@@ -235,13 +238,13 @@ class ResNet(nn.Module):
                                                          kernel_size=1, stride=stride, bias=False))
             else:
                 downsample = nn.Sequential(
-                    conv(self.inplanes, planes * block.expansion,
+                    nn.Conv2d(self.inplanes, planes * block.expansion,
                          kernel_size=1, stride=stride, bias=False),
-                    nn.BatchNorm2d(planes * block.expansion),
+                    #nn.BatchNorm2d(planes * block.expansion),
                 )
 
         layers = [block(self.inplanes, planes, stride, downsample, act=act,
-                        conv=conv, spectral_norm=self.spectral_norm)]
+                        conv=conv)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
             layers.append(block(self.inplanes, planes, act=act, conv=conv))
@@ -262,15 +265,20 @@ class ResNet(nn.Module):
             img_batch = inputs
 
         x = self.conv1(img_batch)
+        x = self.maxpool(x)
         if not self.spectral_norm:
             x = self.bn1(x)
         x = self.act(x)
         x = self.maxpool(x)
 
         x1 = self.layer1(x)
+        #x1 = self.maxpool(x1)
         x2 = self.layer2(x1)
+        #x2 = self.maxpool(x2)
         x3 = self.layer3(x2)
+        #x3 = self.maxpool(x3)
         x4 = self.layer4(x3)
+        #x4 = self.maxpool(x4)
 
         features = self.fpn([x2, x3, x4])
 
