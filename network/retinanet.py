@@ -12,6 +12,7 @@ from network.activations import *
 from network.anchors import Anchors
 from network.layers.bjork_conv2d import BjorckConv2d
 from network.utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
+from meta_layers import MetaBatchNorm2d, MetaConv2d, MetaModule
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
@@ -22,39 +23,30 @@ model_urls = {
 }
 
 
-class PyramidFeatures(nn.Module):
-    def __init__(self, C3_size, C4_size, C5_size, feature_size=256, act=nn.ReLU(), conv=nn.Conv2d):
+class PyramidFeatures(MetaModule):
+    def __init__(self, C3_size, C4_size, C5_size, feature_size=256):
         super(PyramidFeatures, self).__init__()
 
         # upsample C5 to get P5 from the FPN paper
-        self.P5_1 = conv(C5_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P5_1 = nn.utils.spectral_norm(self.P5_1)
+        self.P5_1 = MetaConv2d(C5_size, feature_size, kernel_size=1, stride=1, padding=0)
         self.P5_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
-        self.P5_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-        self.P5_2 = nn.utils.spectral_norm(self.P5_2)
+        self.P5_2 = MetaConv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
 
         # add P5 elementwise to C4
-        self.P4_1 = conv(C4_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P4_1 = nn.utils.spectral_norm(self.P4_1)
-
+        self.P4_1 = MetaConv2d(C4_size, feature_size, kernel_size=1, stride=1, padding=0)
         self.P4_upsampled = nn.Upsample(scale_factor=2, mode='nearest')
-        self.P4_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-        self.P4_2 = nn.utils.spectral_norm(self.P4_2)
+        self.P4_2 = MetaConv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
 
         # add P4 elementwise to C3
-        self.P3_1 = conv(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
-        self.P3_1 = nn.utils.spectral_norm(self.P3_1)
-        self.P3_2 = conv(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
-        self.P3_2 = nn.utils.spectral_norm(self.P3_2)
+        self.P3_1 = MetaConv2d(C3_size, feature_size, kernel_size=1, stride=1, padding=0)
+        self.P3_2 = MetaConv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1)
 
         # "P6 is obtained via a 3x3 stride-2 conv on C5"
-        self.P6 = conv(C5_size, feature_size, kernel_size=3, stride=2, padding=1)
-        self.P6 = nn.utils.spectral_norm(self.P6)
+        self.P6 = MetaConv2d(C5_size, feature_size, kernel_size=3, stride=2, padding=1)
 
         # "P7 is computed by applying ReLU followed by a 3x3 stride-2 conv on P6"
-        self.P7_1 = act  # GroupSort(2,axis=1)
-        self.P7_2 = conv(feature_size, feature_size, kernel_size=3, stride=2, padding=1)
-        self.P7_2 = nn.utils.spectral_norm(self.P7_2)
+        self.P7_1 = nn.ReLU()
+        self.P7_2 = MetaConv2d(feature_size, feature_size, kernel_size=3, stride=2, padding=1)
 
     def forward(self, inputs):
         C3, C4, C5 = inputs
@@ -80,37 +72,37 @@ class PyramidFeatures(nn.Module):
         return [P3_x, P4_x, P5_x, P6_x, P7_x]
 
 
-class RegressionModel(nn.Module):
-    def __init__(self, num_features_in, num_anchors=9, feature_size=256, act=nn.ReLU(), conv=nn.Conv2d):
+class RegressionModel(MetaModule):
+    def __init__(self, num_features_in, num_anchors=9, feature_size=256):
         super(RegressionModel, self).__init__()
 
-        self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
-        self.conv1 = nn.utils.spectral_norm(self.conv1)
-        self.act1 = act
+        self.conv1 = MetaConv2d(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.act1 = nn.ReLU()
 
-        self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv2 = nn.utils.spectral_norm(self.conv2)
-        self.act2 = act
+        self.conv2 = MetaConv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act2 = nn.ReLU()
 
-        self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv3 = nn.utils.spectral_norm(self.conv3)
-        self.act3 = act
+        self.conv3 = MetaConv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act3 = nn.ReLU()
 
-        self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv4 = nn.utils.spectral_norm(self.conv4)
-        self.act4 = act
+        self.conv4 = MetaConv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act4 = nn.ReLU()
 
-        self.output = conv(feature_size, num_anchors * 4, kernel_size=3, padding=1)
+        self.output = MetaConv2d(feature_size, num_anchors * 4, kernel_size=3, padding=1)
 
     def forward(self, x):
         out = self.conv1(x)
         out = self.act1(out)
+
         out = self.conv2(out)
         out = self.act2(out)
+
         out = self.conv3(out)
         out = self.act3(out)
+
         out = self.conv4(out)
         out = self.act4(out)
+
         out = self.output(out)
 
         # out is B x C x W x H, with C = 4*num_anchors
@@ -119,44 +111,41 @@ class RegressionModel(nn.Module):
         return out.contiguous().view(out.shape[0], -1, 4)
 
 
-class ClassificationModel(nn.Module):
-
-    def __init__(self, num_features_in, num_anchors=9, num_classes=80, feature_size=256, act=nn.ReLU(), conv=nn.Conv2d,
-                 sigmoid=True):
+class ClassificationModel(MetaModule):
+    def __init__(self, num_features_in, num_anchors=9, num_classes=80, prior=0.01, feature_size=256):
         super(ClassificationModel, self).__init__()
 
         self.num_classes = num_classes
         self.num_anchors = num_anchors
 
-        self.conv1 = conv(num_features_in, feature_size, kernel_size=3, padding=1)
-        self.conv1 = nn.utils.spectral_norm(self.conv1)
-        self.act1 = act
-        self.conv2 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv2 = nn.utils.spectral_norm(self.conv2)
-        self.act2 = act
+        self.conv1 = MetaConv2d(num_features_in, feature_size, kernel_size=3, padding=1)
+        self.act1 = nn.ReLU()
 
-        self.conv3 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv3 = nn.utils.spectral_norm(self.conv3)
-        self.act3 = act
+        self.conv2 = MetaConv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act2 = nn.ReLU()
 
-        self.conv4 = conv(feature_size, feature_size, kernel_size=3, padding=1)
-        self.conv4 = nn.utils.spectral_norm(self.conv4)
-        self.act4 = act
+        self.conv3 = MetaConv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act3 = nn.ReLU()
 
-        self.output = conv(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
-        self.output_act = act
-        if sigmoid:
-            self.output_act = nn.Sigmoid()
+        self.conv4 = MetaConv2d(feature_size, feature_size, kernel_size=3, padding=1)
+        self.act4 = nn.ReLU()
+
+        self.output = MetaConv2d(feature_size, num_anchors * num_classes, kernel_size=3, padding=1)
+        self.output_act = nn.Sigmoid()
 
     def forward(self, x):
         out = self.conv1(x)
         out = self.act1(out)
+
         out = self.conv2(out)
         out = self.act2(out)
+
         out = self.conv3(out)
         out = self.act3(out)
+
         out = self.conv4(out)
         out = self.act4(out)
+
         out = self.output(out)
         out = self.output_act(out)
 
@@ -170,12 +159,11 @@ class ClassificationModel(nn.Module):
         return out2.contiguous().view(x.shape[0], -1, self.num_classes)
 
 
-class ResNet(nn.Module):
+class ResNet(MetaModule):
 
-    def __init__(self, num_classes, block, layers, act=nn.ReLU(), conv=nn.Conv2d, spectral_norm=False):
+    def __init__(self, num_classes, block, layers, act=nn.ReLU(), conv=nn.Conv2d):
         self.inplanes = 64
         super(ResNet, self).__init__()
-        self.spectral_norm = spectral_norm
         self.conv1 = conv(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.act = act
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
@@ -183,10 +171,7 @@ class ResNet(nn.Module):
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
         self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        if self.spectral_norm:
-            self.conv1 = nn.utils.spectral_norm(self.conv1)
-        else:
-            self.bn1 = nn.BatchNorm2d(64)
+        self.bn1 = MetaBatchNorm2d(64)
         if block == BasicBlock:
             fpn_sizes = [self.layer2[layers[1] - 1].conv2.out_channels, self.layer3[layers[2] - 1].conv2.out_channels,
                          self.layer4[layers[3] - 1].conv2.out_channels]
@@ -196,10 +181,11 @@ class ResNet(nn.Module):
         else:
             raise ValueError(f"Block type {block} not understood")
 
-        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2], act=act, conv=conv)
+        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
 
-        self.regressionModel = RegressionModel(256, num_anchors=15, act=act, conv=conv)
-        self.classificationModel = ClassificationModel(256, num_classes=num_classes, num_anchors=15, act=act, conv=conv)
+        self.regressionModel = RegressionModel(256, num_anchors=15)
+        self.classificationModel = ClassificationModel(256, num_classes=num_classes, num_anchors=15)
+
 
         self.anchors = Anchors()
 
@@ -213,38 +199,33 @@ class ResNet(nn.Module):
             if isinstance(m, conv):
                 n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
                 m.weight.data.normal_(0, math.sqrt(2. / n))
-            elif isinstance(m, nn.BatchNorm2d):
+            elif isinstance(m, MetaBatchNorm2d):
                 m.weight.data.fill_(1)
                 m.bias.data.zero_()
 
-        prior = 0.01
+        #prior = 0.01
 
-        self.classificationModel.output.weight.data.fill_(0)
-        self.classificationModel.output.bias.data.fill_(-math.log((1.0 - prior) / prior))
+        #self.classificationModel.output.weight.data.fill_(0)
+        #self.classificationModel.output.bias.data.fill_(-math.log((1.0 - prior) / prior))
 
-        self.regressionModel.output.weight.data.fill_(0)
-        self.regressionModel.output.bias.data.fill_(0)
+        #self.regressionModel.output.weight.data.fill_(0)
+        #self.regressionModel.output.bias.data.fill_(0)
 
         self.freeze_bn()
 
     def _make_layer(self, block, planes, blocks, stride=1, act=nn.ReLU(inplace=True), conv=nn.Conv2d):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
-            if self.spectral_norm:
-                downsample = nn.utils.spectral_norm(conv(self.inplanes, planes * block.expansion,
-                                                         kernel_size=1, stride=stride, bias=False))
-            else:
-                downsample = nn.Sequential(
-                    conv(self.inplanes, planes * block.expansion,
-                         kernel_size=1, stride=stride, bias=False),
-                    nn.BatchNorm2d(planes * block.expansion),
-                )
+            downsample = nn.Sequential(
+                conv(self.inplanes, planes * block.expansion,
+                     kernel_size=1, stride=stride, bias=False),
+                MetaBatchNorm2d(planes * block.expansion),
+            )
 
-        layers = [block(self.inplanes, planes, stride, downsample, act=act,
-                        conv=conv, spectral_norm=self.spectral_norm)]
+        layers = [block(self.inplanes, planes, stride, downsample, act=act)]
         self.inplanes = planes * block.expansion
         for i in range(1, blocks):
-            layers.append(block(self.inplanes, planes, act=act, conv=conv))
+            layers.append(block(self.inplanes, planes, act=act))
 
         return nn.Sequential(*layers)
 
@@ -254,6 +235,16 @@ class ResNet(nn.Module):
             if isinstance(layer, nn.BatchNorm2d):
                 layer.eval()
 
+    def update_all_params(self):
+        self.classificationModel.update_params()
+        self.regressionModel.update_params()
+        self.fpn.update_params()
+
+    def get_all_params(self):
+        params = (self.classificationModel.params(), self.regressionModel.params(),self.fpn.params())
+        return params
+
+
     def forward(self, inputs):
 
         if self.training:
@@ -262,8 +253,7 @@ class ResNet(nn.Module):
             img_batch = inputs
 
         x = self.conv1(img_batch)
-        if not self.spectral_norm:
-            x = self.bn1(x)
+        x = self.bn1(x)
         x = self.act(x)
         x = self.maxpool(x)
 

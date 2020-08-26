@@ -1,8 +1,7 @@
 import os
 import re
-import shutil
-
 import torch
+from torch.autograd import Variable
 
 
 def atoi(text):
@@ -42,3 +41,10 @@ def load_best_ckp(checkpoint_filepath, model, optimizer):
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
         return param_group['lr']
+
+
+def to_var(x, requires_grad=True):
+    if torch.cuda.is_available():
+        x = x.cuda()
+    return Variable(x, requires_grad=requires_grad)
+
