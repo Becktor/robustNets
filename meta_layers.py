@@ -70,8 +70,8 @@ class MetaModule(nn.Module):
                     self.set_param(mod, rest, param)
                     break
         else:
-            w = torch.nn.Parameter(param)
-            setattr(curr_mod, name, w)
+            #w = torch.nn.Parameter(param)
+            setattr(curr_mod, name, param)
 
     def detach_params(self):
         for name, param in self.named_params(self):

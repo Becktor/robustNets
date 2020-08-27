@@ -9,6 +9,7 @@ import torch
 
 from network.activations import GroupSort, MaxMin
 from network.layers.bjork_conv2d import BjorckConv2d
+from meta_layers import MetaConv2d
 
 if os.name == 'nt':
     import ctypes
@@ -84,7 +85,7 @@ def main(args=None):
     prev_epoch = 0
     mAP = 0
     model = model.cuda() #torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=1e-3)
+    optimizer = optim.Adam(model.params(), lr=1e-3)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -137,11 +138,11 @@ def main(args=None):
                 meta_classification_loss, meta_regression_loss = meta_model([image, labels])
                 meta_classification_loss = meta_classification_loss.mean()
                 meta_regression_loss = meta_regression_loss.mean()
+                meta_joined = meta_classification_loss+meta_regression_loss
+                #l_f_meta = l_c_meta + l_r_meta
+                eps = to_var(torch.zeros(meta_joined.size()))
+                l_f_meta = torch.sum(meta_joined * eps)
 
-                eps = to_var(torch.zeros(meta_classification_loss.size()))
-                l_c_meta = torch.sum(meta_classification_loss * eps)
-                l_r_meta = torch.sum(meta_regression_loss * eps)
-                l_f_meta = l_c_meta + l_r_meta
                 meta_model.zero_grad()
 
                 # Line 6 perform a parameter update
@@ -158,7 +159,7 @@ def main(args=None):
                 y_c_meta = torch.sum(y_meta_classification_loss)
                 y_r_meta = torch.sum(y_meta_regression_loss)
                 l_g_meta = y_c_meta + y_r_meta
-
+                print(eps.size())
                 grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)
                 # Line 11 computing and normalizing the weights
                 w_tilde = torch.clamp(-grad_eps[0], min=0)
@@ -171,7 +172,7 @@ def main(args=None):
 
                 # Lines 12 - 14 computing for the loss with the computed weights
                 # and then perform a parameter update
-                classification_loss, regression_loss = meta_model([v_image, v_labels])
+                classification_loss, regression_loss = model([v_image, v_labels])
 
                 cost = classification_loss + regression_loss
 

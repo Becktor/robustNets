@@ -16,7 +16,7 @@ class BasicBlock(MetaModule):
         self.act = act
         self.conv2 = MetaConv2d(planes, planes, kernel_size=3, stride=1,
                           padding=1, bias=False)
-        self.bn2 = nn.BatchNorm2d(planes)
+        self.bn2 = MetaBatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
 

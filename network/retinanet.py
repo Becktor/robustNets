@@ -164,7 +164,7 @@ class ResNet(MetaModule):
     def __init__(self, num_classes, block, layers, act=nn.ReLU(), conv=nn.Conv2d):
         self.inplanes = 64
         super(ResNet, self).__init__()
-        self.conv1 = conv(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = MetaConv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
         self.act = act
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
@@ -217,7 +217,7 @@ class ResNet(MetaModule):
         downsample = None
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                conv(self.inplanes, planes * block.expansion,
+                MetaConv2d(self.inplanes, planes * block.expansion,
                      kernel_size=1, stride=stride, bias=False),
                 MetaBatchNorm2d(planes * block.expansion),
             )
