@@ -36,7 +36,7 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=1)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -76,15 +76,15 @@ def main(args=None):
     elif parser.depth == 152:
         model = retinanet.resnet152(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     else:
-        raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
+        raise ValueError('Unsupported model d/home/jobe/git/robustNetsepth, must be one of 18, 34, 50, 101, 152')
 
     use_gpu = True
     if use_gpu:
         model = model.cuda()
     prev_epoch = 0
     mAP = 0
-    model = torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=1e-4)
+    model = model.cuda() #torch.nn.DataParallel(model).cuda()
+    optimizer = optim.Adam(model.parameters(), lr=1e-3)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -93,7 +93,7 @@ def main(args=None):
         writer = SummaryWriter(checkpoint_dir + "/tb_event")
         dataiter = iter(dataloader_train)
         data = dataiter.next()
-        writer.add_graph(model.module, data['img'].cuda().float())
+        writer.add_graph(model, data['img'].cuda().float())
 
     else:
         model, optimizer, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer)
@@ -106,24 +106,25 @@ def main(args=None):
     scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer, 100)
     loss_hist = collections.deque(maxlen=500)
     model.train()
-    model.module.freeze_bn()
+    model.freeze_bn()
     print('Num training images: {}'.format(len(dataset_train)))
     meta_losses_clean = []
     net_losses = []
     for epoch_num in range(parser.epochs):
         curr_epoch = prev_epoch + epoch_num
         model.train()
-        model.module.freeze_bn()
+        model.freeze_bn()
         epoch_loss = []
         lr = get_lr(optimizer)
         print(lr)
         print('============= Starting Epoch {}============\n'.format(curr_epoch))
         for iter_num, data in enumerate(dataloader_train):
-            try:
+            #try:
                 # Line 2 get batch of data
                 # since validation data is small I just fixed them instead of building an iterator
                 # initialize a dummy network for the meta learning of the weights
                 meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+                #meta_model = torch.nn.DataParallel(meta_model).cuda()
                 meta_model.load_state_dict(model.state_dict())
 
                 if torch.cuda.is_available():
@@ -158,10 +159,9 @@ def main(args=None):
                 y_r_meta = torch.sum(y_meta_regression_loss)
                 l_g_meta = y_c_meta + y_r_meta
 
-                grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]
-
+                grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)
                 # Line 11 computing and normalizing the weights
-                w_tilde = torch.clamp(-grad_eps, min=0)
+                w_tilde = torch.clamp(-grad_eps[0], min=0)
                 norm_c = torch.sum(w_tilde)
 
                 if norm_c != 0:
@@ -194,9 +194,9 @@ def main(args=None):
 
                 del classification_loss
                 del regression_loss
-            except Exception as e:
-                print(e)
-                continue
+            #except Exception as e:
+            #    print(e)
+            #    continue
 
         if parser.csv_val is not None:
             print('Evaluating dataset')
