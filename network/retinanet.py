@@ -181,11 +181,10 @@ class ResNet(MetaModule):
         else:
             raise ValueError(f"Block type {block} not understood")
 
-        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
+        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2],feature_size=128)
 
-        self.regressionModel = RegressionModel(256, num_anchors=15)
-        self.classificationModel = ClassificationModel(256, num_classes=num_classes, num_anchors=15)
-
+        self.regressionModel = RegressionModel(128, num_anchors=15)
+        self.classificationModel = ClassificationModel(128, num_classes=num_classes, num_anchors=15)
 
         self.anchors = Anchors()
 
@@ -241,9 +240,8 @@ class ResNet(MetaModule):
         self.fpn.update_params()
 
     def get_all_params(self):
-        params = (self.classificationModel.params(), self.regressionModel.params(),self.fpn.params())
+        params = (self.classificationModel.params(), self.regressionModel.params(), self.fpn.params())
         return params
-
 
     def forward(self, inputs):
 

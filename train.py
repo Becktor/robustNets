@@ -35,6 +35,7 @@ def main(args=None):
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
+    parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=1)
@@ -54,12 +55,24 @@ def main(args=None):
         dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
                                  transform=transforms.Compose([Resizer()]))
 
+    if parser.csv_weight is None:
+        dataset_weight = None
+        print('No validation annotations provided.')
+    else:
+        dataset_weight = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
+                                    transform=transforms.Compose([Resizer()]))
+
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
+
+    sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=1, drop_last=False)
+    dataloader_weight = DataLoader(dataset_weight, num_workers=3, collate_fn=collater, batch_sampler=sampler_weight)
+
+
 
     pre_trained = False
     if parser.pre_trained:
@@ -85,7 +98,7 @@ def main(args=None):
     prev_epoch = 0
     mAP = 0
     model = model.cuda() #torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.params(), lr=1e-3)
+    optimizer = optim.Adam(model.params(), lr=1e-4)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -124,6 +137,7 @@ def main(args=None):
                 # Line 2 get batch of data
                 # since validation data is small I just fixed them instead of building an iterator
                 # initialize a dummy network for the meta learning of the weights
+                print("test")
                 meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
                 #meta_model = torch.nn.DataParallel(meta_model).cuda()
                 meta_model.load_state_dict(model.state_dict())
@@ -148,21 +162,34 @@ def main(args=None):
                 # Line 6 perform a parameter update
                 grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
 
-                lr = 1e-3
                 meta_model.update_params(lr, source_params=grads)
+                cnt = 0
+                n = 10
+                acc_grad_eps = torch.tensor(0., dtype=torch.float)
+                for wdata in dataloader_weight:
+                    # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
+                    v_image = to_var(wdata['img'], requires_grad=False)
+                    v_labels = to_var(wdata['annot'], requires_grad=False)
 
-                # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
-                v_image = to_var(data['img'], requires_grad=False)
-                v_labels = to_var(data['annot'], requires_grad=False)
+                    y_meta_classification_loss, y_meta_regression_loss = meta_model([v_image, v_labels])
+                    y_c_meta = torch.sum(y_meta_classification_loss)
+                    y_r_meta = torch.sum(y_meta_regression_loss)
+                    l_g_meta = y_c_meta + y_r_meta
+                    if l_g_meta == torch.tensor(0.).cuda():
+                        continue
+                    if cnt < n:
+                        grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True, retain_graph=True)
+                    else:
+                        grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)
 
-                y_meta_classification_loss, y_meta_regression_loss = meta_model([v_image, v_labels])
-                y_c_meta = torch.sum(y_meta_classification_loss)
-                y_r_meta = torch.sum(y_meta_regression_loss)
-                l_g_meta = y_c_meta + y_r_meta
-                print(eps.size())
-                grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)
+                    acc_grad_eps += grad_eps[0]
+                    cnt += 1
+                    if cnt > n:
+                        print(acc_grad_eps)
+                        acc_grad_eps /= cnt
+                        break
                 # Line 11 computing and normalizing the weights
-                w_tilde = torch.clamp(-grad_eps[0], min=0)
+                w_tilde = torch.clamp(-acc_grad_eps.detach(), min=0)
                 norm_c = torch.sum(w_tilde)
 
                 if norm_c != 0:
@@ -172,7 +199,7 @@ def main(args=None):
 
                 # Lines 12 - 14 computing for the loss with the computed weights
                 # and then perform a parameter update
-                classification_loss, regression_loss = model([v_image, v_labels])
+                classification_loss, regression_loss = model([image, labels])
 
                 cost = classification_loss + regression_loss
 
