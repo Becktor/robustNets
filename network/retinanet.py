@@ -162,16 +162,16 @@ class ClassificationModel(MetaModule):
 class ResNet(MetaModule):
 
     def __init__(self, num_classes, block, layers, act=nn.ReLU(), conv=nn.Conv2d):
-        self.inplanes = 64
+        self.inplanes = 8
         super(ResNet, self).__init__()
-        self.conv1 = MetaConv2d(3, 64, kernel_size=7, stride=2, padding=3, bias=False)
+        self.conv1 = MetaConv2d(3, 8, kernel_size=7, stride=2, padding=3, bias=False)
         self.act = act
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
-        self.layer1 = self._make_layer(block, 64, layers[0])
-        self.layer2 = self._make_layer(block, 128, layers[1], stride=2)
-        self.layer3 = self._make_layer(block, 256, layers[2], stride=2)
-        self.layer4 = self._make_layer(block, 512, layers[3], stride=2)
-        self.bn1 = MetaBatchNorm2d(64)
+        self.layer1 = self._make_layer(block, 16, layers[0])
+        self.layer2 = self._make_layer(block, 16, layers[1], stride=2)
+        self.layer3 = self._make_layer(block, 32, layers[2], stride=2)
+        self.layer4 = self._make_layer(block, 64, layers[3], stride=2)
+        self.bn1 = MetaBatchNorm2d(8)
         if block == BasicBlock:
             fpn_sizes = [self.layer2[layers[1] - 1].conv2.out_channels, self.layer3[layers[2] - 1].conv2.out_channels,
                          self.layer4[layers[3] - 1].conv2.out_channels]
@@ -181,10 +181,10 @@ class ResNet(MetaModule):
         else:
             raise ValueError(f"Block type {block} not understood")
 
-        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2],feature_size=128)
+        self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2], feature_size=64)
 
-        self.regressionModel = RegressionModel(128, num_anchors=15)
-        self.classificationModel = ClassificationModel(128, num_classes=num_classes, num_anchors=15)
+        self.regressionModel = RegressionModel(64, num_anchors=15)
+        self.classificationModel = ClassificationModel(64, num_classes=num_classes, num_anchors=15)
 
         self.anchors = Anchors()
 

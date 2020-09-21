@@ -5,17 +5,18 @@ import torch.nn as nn
 from network.activations import *
 from meta_layers import MetaModule, MetaConv2d, MetaBatchNorm2d
 
+
 class BasicBlock(MetaModule):
     expansion = 1
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None, act=GroupSort(2, axis=1)):
+    def __init__(self, inplanes, planes, stride=1, downsample=None, act=nn.ReLU()):
         super(BasicBlock, self).__init__()
         self.conv1 = MetaConv2d(inplanes, planes, kernel_size=3, stride=stride,
-                          padding=1, bias=False)
+                                padding=1, bias=False)
         self.bn1 = MetaBatchNorm2d(planes)
         self.act = act
         self.conv2 = MetaConv2d(planes, planes, kernel_size=3, stride=1,
-                          padding=1, bias=False)
+                                padding=1, bias=False)
         self.bn2 = MetaBatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
@@ -45,10 +46,10 @@ class GroupBlock(MetaModule):
     def __init__(self, inplanes, planes, stride=1, downsample=None, act=nn.ReLU()):
         super(BasicBlock, self).__init__()
         self.conv1 = MetaConv2d(inplanes, planes, kernel_size=3, stride=stride,
-                          padding=1, bias=False)
+                                padding=1, bias=False)
         self.act = act
         self.conv2 = MetaConv2d(planes, planes, kernel_size=3, stride=1,
-                          padding=1, bias=False)
+                                padding=1, bias=False)
         self.downsample = downsample
         self.stride = stride
 
