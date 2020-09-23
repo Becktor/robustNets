@@ -38,7 +38,7 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=2)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=8)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -69,7 +69,7 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
 
-    sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=4, drop_last=False)
+    sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=8, drop_last=False)
     dataloader_weight = DataLoader(dataset_weight, num_workers=3, collate_fn=collater, batch_sampler=sampler_weight)
 
 
@@ -90,7 +90,7 @@ def main(args=None):
     elif parser.depth == 152:
         model = retinanet.resnet152(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     else:
-        raise ValueError('Unsupported model d/home/jobe/git/robustNetsepth, must be one of 18, 34, 50, 101, 152')
+        raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 
     use_gpu = True
     if use_gpu:
@@ -136,7 +136,7 @@ def main(args=None):
 
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
-            classification_loss, regression_loss = model([image, labels])
+            classification_loss, regression_loss, cl = model([image, labels])
 
             cost = classification_loss + regression_loss
 
@@ -156,12 +156,12 @@ def main(args=None):
                     meta_model.cuda()
 
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
-                meta_classification_loss, meta_regression_loss = meta_model([image, labels])
+                meta_classification_loss, meta_regression_loss, cl = meta_model([image, labels])
                 meta_classification_loss = meta_classification_loss.mean()
                 meta_regression_loss = meta_regression_loss.mean()
                 meta_joined = meta_classification_loss+meta_regression_loss
                 #l_f_meta = l_c_meta + l_r_meta
-                eps = to_var(torch.zeros(meta_joined.size()))
+                eps = to_var(torch.zeros(cl[0].size()))
                 l_f_meta = torch.sum(meta_joined * eps)
 
                 meta_model.zero_grad()
@@ -180,11 +180,11 @@ def main(args=None):
                     v_image = to_var(wdata['img'], requires_grad=False)
                     v_labels = to_var(wdata['annot'], requires_grad=False)
 
-                    y_meta_classification_loss, y_meta_regression_loss = meta_model([v_image, v_labels])
-                    y_c_meta = torch.sum(y_meta_classification_loss)
-                    y_r_meta = torch.sum(y_meta_regression_loss)
-                    l_g_meta = y_c_meta + y_r_meta
-                    if l_g_meta == torch.tensor(0.).cuda():
+                    y_meta_classification_loss, y_meta_regression_loss, cl_y = meta_model([v_image, v_labels])
+                    #y_c_meta = torch.sum(cl_y[0])
+                    #y_r_meta = torch.sum(cl_y[1])
+                    l_g_meta = cl_y[0] + cl_y[1]
+                    if torch.sum(l_g_meta) == torch.tensor(0.).cuda():
                         continue
                     #if cnt < n:
                     #    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True, retain_graph=True)
@@ -205,6 +205,7 @@ def main(args=None):
                     w = w_tilde / norm_c
                 else:
                     w = w_tilde
+                cost = cl[0] + cl[1]
                 loss = torch.sum(cost * w)
                 if loss == torch.tensor(0.).cuda():
                     continue
