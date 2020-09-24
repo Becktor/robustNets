@@ -143,7 +143,7 @@ def main(args=None):
             loss = torch.sum(cost)
             if loss == torch.tensor(0.).cuda():
                 continue
-            if epoch_num >= 1:
+            if epoch_num >= 0:
                 #try:
                 # Line 2 get batch of data
                 # since validation data is small I just fixed them instead of building an iterator
@@ -156,23 +156,25 @@ def main(args=None):
                     meta_model.cuda()
 
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
-                meta_classification_loss, meta_regression_loss, cl = meta_model([image, labels])
-                meta_classification_loss = meta_classification_loss.mean()
-                meta_regression_loss = meta_regression_loss.mean()
-                meta_joined = meta_classification_loss+meta_regression_loss
+
+                meta_classification_loss, meta_regression_loss, meta_cl = meta_model([image, labels])
+                meta_classification_loss = meta_cl[0]
+                meta_regression_loss = meta_cl[1]
+                meta_joined = meta_classification_loss + meta_regression_loss
                 #l_f_meta = l_c_meta + l_r_meta
-                eps = to_var(torch.zeros(cl[0].size()))
-                l_f_meta = torch.sum(meta_joined * eps)
+                eps = to_var(torch.zeros(meta_joined.size()))
+                l_f_meta = torch.sum(meta_joined.mean() * eps)
+
 
                 meta_model.zero_grad()
 
                 # Line 6 perform a parameter update
-                grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
+                grads = torch.autograd.grad(l_f_meta, meta_model.params(), create_graph=True)
 
                 meta_model.update_params(lr, source_params=grads)
                 cnt = 0
                 n = 0
-                acc_grad_eps = torch.tensor(0., dtype=torch.float)
+                acc_grad_eps = torch.zeros(meta_joined.size())
 
                 for wdata in dataloader_weight:
 
@@ -180,25 +182,23 @@ def main(args=None):
                     v_image = to_var(wdata['img'], requires_grad=False)
                     v_labels = to_var(wdata['annot'], requires_grad=False)
 
-                    y_meta_classification_loss, y_meta_regression_loss, cl_y = meta_model([v_image, v_labels])
+
+                    y_meta_classification_loss, y_meta_regression_loss, cl_v = meta_model([v_image, v_labels])
                     #y_c_meta = torch.sum(cl_y[0])
                     #y_r_meta = torch.sum(cl_y[1])
-                    l_g_meta = cl_y[0] + cl_y[1]
+                    l_g_meta = cl_v[0] + cl_v[1]
+
                     if torch.sum(l_g_meta) == torch.tensor(0.).cuda():
                         continue
                     #if cnt < n:
                     #    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True, retain_graph=True)
                     #else:
-                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)
-
-                    acc_grad_eps += grad_eps[0]
+                    grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0]
                     cnt += 1
                     if cnt > n:
-                        #print(acc_grad_eps)
-                        acc_grad_eps /= cnt
                         break
                 # Line 11 computing and normalizing the weights
-                w_tilde = torch.clamp(-acc_grad_eps.detach(), min=0)
+                w_tilde = torch.clamp(-grad_eps.detach(), min=0)
                 norm_c = torch.sum(w_tilde)
 
                 if norm_c != 0:
