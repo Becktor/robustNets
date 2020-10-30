@@ -162,13 +162,13 @@ def main(args=None):
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
 
                 meta_classification_loss, meta_regression_loss, meta_cl = meta_model([image, labels])
-                meta_joined = meta_classification_loss + meta_regression_loss
+                meta_joined_cost = meta_cl[0] + meta_cl[1]
                 eps = to_var(torch.zeros(meta_cl[0].size()))
-                l_f_meta = torch.sum(meta_joined * eps)
+                l_f_meta = torch.sum(meta_joined_cost * eps)
                 meta_model.zero_grad()
 
                 # Line 6 perform a parameter update
-                grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
+                grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
                 if any(x is None for x in grads):
                     skipped_iters += 1
 
@@ -184,7 +184,7 @@ def main(args=None):
                     grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0]
 
                     # Line 11 computing and normalizing the weights
-                    w_tilde = torch.clamp(-grad_eps, min=0)
+                    w_tilde = torch.clamp(-grad_eps.detach(), min=0)
                     norm_c = torch.sum(w_tilde)
 
                     if norm_c != 0:
@@ -196,7 +196,8 @@ def main(args=None):
 
                 if loss == torch.tensor(0.).cuda():
                     skipped_iters += 1
-                    continue
+#                    optimizer.zero_grad()
+#                    continue
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 
