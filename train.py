@@ -98,7 +98,7 @@ def main(args=None):
     prev_epoch = 0
     mAP = 0
     model = model.cuda() #torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.params(), lr=1e-2)
+    optimizer = optim.Adam(model.params(), lr=1e-3)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
     if parser.continue_training is None:
@@ -118,11 +118,13 @@ def main(args=None):
 
     model.training = True
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=1, gamma=0.1) #CosineAnnealingLR(optimizer, 100)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1) #CosineAnnealingLR(optimizer, 100)
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.freeze_bn()
     print('Num training images: {}'.format(len(dataset_train)))
+
+
 
     #w_data_iter = iter(dataloader_train)
 
@@ -143,37 +145,33 @@ def main(args=None):
 
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
-            classification_loss, regression_loss, cl = model([image, labels])
-
+            classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
-
             loss = torch.sum(cost)
             if loss == torch.tensor(0.).cuda():
                 continue
-            if epoch_num >= 2:
+            if curr_epoch >= 30:
                 # Line 2 get batch of data
                 # since validation data is small I just fixed them instead of building an iterator
                 # initialize a dummy network for the meta learning of the weights
+                # Setup meta net
                 meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
                 meta_model.load_state_dict(model.state_dict())
-
                 if torch.cuda.is_available():
                     meta_model.cuda()
-
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
 
                 meta_classification_loss, meta_regression_loss, meta_cl = meta_model([image, labels])
                 meta_joined = meta_classification_loss + meta_regression_loss
                 eps = to_var(torch.zeros(meta_cl[0].size()))
                 l_f_meta = torch.sum(meta_joined * eps)
-
                 meta_model.zero_grad()
 
                 # Line 6 perform a parameter update
                 grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
                 if any(x is None for x in grads):
                     skipped_iters += 1
-                    continue
+
                 meta_model.update_params(lr, source_params=grads)
 
                 for weighted_data in dataloader_weight:
@@ -181,26 +179,21 @@ def main(args=None):
                     v_image = to_var(weighted_data['img'], requires_grad=False)
                     v_labels = to_var(weighted_data['annot'], requires_grad=False)
 
-                    y_meta_classification_loss, y_meta_regression_loss, cl_v = meta_model([v_image, v_labels])
-                    l_g_meta = cl_v[0] + cl_v[1]
-
-                    if torch.sum(l_g_meta) == torch.tensor(0.).cuda():
-                        zero_loss += 1
-                        continue
-
+                    y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
+                    l_g_meta = y_meta_classification_loss + y_meta_regression_loss
                     grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0]
 
                     # Line 11 computing and normalizing the weights
-                    w_tilde = torch.clamp(-grad_eps.detach(), min=0)
+                    w_tilde = torch.clamp(-grad_eps, min=0)
                     norm_c = torch.sum(w_tilde)
 
                     if norm_c != 0:
                         w = w_tilde / norm_c
                     else:
                         w = w_tilde
-                    cost = cl[0] + cl[1]
                     loss = torch.sum(cost * w)
                     break
+
                 if loss == torch.tensor(0.).cuda():
                     skipped_iters += 1
                     continue
