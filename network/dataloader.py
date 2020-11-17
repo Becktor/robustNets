@@ -20,7 +20,7 @@ from torch.utils.data.sampler import Sampler
 class CSVDataset(Dataset):
     """CSV dataset."""
 
-    def __init__(self, train_file, class_list, transform=None):
+    def __init__(self, train_file, class_list, use_path=False, transform=None):
         """
         Args:
             train_file (string): CSV file with training annotations
@@ -49,14 +49,16 @@ class CSVDataset(Dataset):
         except ValueError as e:
             raise_from(ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e)), None)
         self.image_names = list(self.image_data.keys())
-        cnt = len(self.image_names)
-        for l in range(cnt):
-            pp = os.path.dirname(train_file)
-            img_path = pp + self.image_names[l][17:]
-            img_data = self.image_data[self.image_names[l]]
-            del self.image_data[self.image_names[l]]
-            self.image_names[l] = img_path
-            self.image_data[img_path] = img_data
+
+        if not use_path:
+            for x, image_name in enumerate(self.image_names):
+                dir_path = os.path.dirname(train_file)
+                filename = os.path.split(image_name)[-1]
+                img_path = os.path.join(os.path.join(dir_path, '2019_04_12_data'), filename)
+                img_data = self.image_data[image_name]
+                del self.image_data[image_name]
+                self.image_names[x] = img_path
+                self.image_data[img_path] = img_data
 
     def _parse(self, value, function, fmt):
         """
@@ -248,8 +250,8 @@ class Gaussian(object):
         if self.noise_level > 0:
             image = image + torch.empty(image.shape).normal_(mean=0, std=self.noise_level).numpy()
             image = np.clip(0, 1, image)
-        #temp_img = (image * 255).astype(np.uint8)
-        #Image.fromarray(temp_img).save("noisy.png")
+        # temp_img = (image * 255).astype(np.uint8)
+        # Image.fromarray(temp_img).save("noisy.png")
         return {'img': image.astype(np.float32), 'annot': annots}
 
 
@@ -264,9 +266,9 @@ class GaussianBlur(object):
         if self.level <= 0:
             return {'img': image, 'annot': annots}
         uint8_image = (image * 255).astype(np.uint8)
-        #Image.fromarray(uint8_image).save("Blur_inp.png")
+        # Image.fromarray(uint8_image).save("Blur_inp.png")
         aug_image = self.blur(image=uint8_image)
-        #Image.fromarray(aug_image).save("Blur_aug.png")
+        # Image.fromarray(aug_image).save("Blur_aug.png")
         image = aug_image.astype(np.float) / 255
         image = np.clip(0, 1, image)
         return {'img': image.astype(np.float32), 'annot': annots}
@@ -284,7 +286,7 @@ class SAP(object):
         if self.per <= 0:
             return {'img': image, 'annot': annots}
         uint8_image = (image * 255).astype(np.uint8)
-        #Image.fromarray(uint8_image).save("SP_inp.png")
+        # Image.fromarray(uint8_image).save("SP_inp.png")
         aug_image = self.sap(image=uint8_image)
         Image.fromarray(aug_image).save("SP_aug.png")
         image = aug_image.astype(np.float) / 255

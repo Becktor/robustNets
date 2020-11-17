@@ -45,7 +45,7 @@ def main(args=None):
 
     parser = parser.parse_args(args)
 
-    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes,
+    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
                                transform=transforms.Compose([Augmenter(), Resizer()]))
 
     if parser.csv_val is None:
@@ -59,7 +59,7 @@ def main(args=None):
         dataset_weight = None
         print('No validation annotations provided.')
     else:
-        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes,
+        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=True,
                                     transform=transforms.Compose([Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
@@ -73,18 +73,16 @@ def main(args=None):
     dataloader_weight = DataLoader(dataset_weight, num_workers=3, collate_fn=collater, batch_sampler=sampler_weight)
 
 
-
     pre_trained = False
     if parser.pre_trained:
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.resnet18(num_classes=dataset_train.num_classes())#, pretrained=pre_trained)
+        model = retinanet.resnet18(num_classes=dataset_train.num_classes())
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
-        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained,
-                                   act=MaxMin(axis=1))
+        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -118,15 +116,11 @@ def main(args=None):
 
     model.training = True
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=15, gamma=0.1) #CosineAnnealingLR(optimizer, 100)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1) #CosineAnnealingLR(optimizer, 100)
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.freeze_bn()
     print('Num training images: {}'.format(len(dataset_train)))
-
-
-
-    #w_data_iter = iter(dataloader_train)
 
     for epoch_num in range(parser.epochs):
         curr_epoch = prev_epoch + epoch_num
@@ -142,9 +136,11 @@ def main(args=None):
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
         for iter_num, data in enumerate(dataloader_train):
-
             image = to_var(data['img'], requires_grad=False)
+            da = data['annot']
+
             labels = to_var(data['annot'], requires_grad=False)
+
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
@@ -168,9 +164,10 @@ def main(args=None):
                 meta_model.zero_grad()
 
                 # Line 6 perform a parameter update
-                grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True)
+                grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
                 if any(x is None for x in grads):
                     skipped_iters += 1
+                    continue
 
                 meta_model.update_params(lr, source_params=grads)
 
@@ -195,9 +192,9 @@ def main(args=None):
                     break
 
                 if loss == torch.tensor(0.).cuda():
-                    skipped_iters += 1
+                    zero_loss += 1
 #                    optimizer.zero_grad()
-#                    continue
+                    continue
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 
