@@ -69,8 +69,9 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
 
-    sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size, drop_last=False)
-    dataloader_weight = DataLoader(dataset_weight, num_workers=3, collate_fn=collater, batch_sampler=sampler_weight)
+    #sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size, drop_last=False)
+    dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
+                                   shuffle=True)
 
 
     pre_trained = False
@@ -137,9 +138,8 @@ def main(args=None):
             print('setting LR: {}'.format(lr))
         for iter_num, data in enumerate(dataloader_train):
             image = to_var(data['img'], requires_grad=False)
-            da = data['annot']
-
             labels = to_var(data['annot'], requires_grad=False)
+
 
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
@@ -175,6 +175,7 @@ def main(args=None):
                     # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
                     v_image = to_var(weighted_data['img'], requires_grad=False)
                     v_labels = to_var(weighted_data['annot'], requires_grad=False)
+                    names = weighted_data['name']
 
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss

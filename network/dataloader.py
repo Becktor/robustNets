@@ -106,8 +106,10 @@ class CSVDataset(Dataset):
     def __getitem__(self, idx):
 
         img = self.load_image(idx)
+        name = self.image_names[idx]
         annot = self.load_annotations(idx, img.shape)
-        sample = {'img': img, 'annot': annot}
+
+        sample = {'img': img, 'annot': annot, 'name': name}
         if self.transform:
             sample = self.transform(sample)
         return sample
@@ -207,6 +209,7 @@ def collater(data):
     imgs = [s['img'] for s in data]
     annots = [s['annot'] for s in data]
     scales = [s['scale'] for s in data]
+    names = [s['name'] for s in data]
 
     widths = [int(s.shape[0]) for s in imgs]
     heights = [int(s.shape[1]) for s in imgs]
@@ -238,7 +241,7 @@ def collater(data):
 
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
-    return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales}
+    return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales, 'name': names}
 
 
 class Gaussian(object):
@@ -324,11 +327,38 @@ class AddWeather(object):
         return {'img': image.astype(np.float32), 'annot': annots}
 
 
+class Crop(object):
+    """Convert ndarrays in sample to Tensors."""
+
+    def __call__(self, sample):
+        image, annots, name = sample['img'], sample['annot'], sample['name']
+        rows, cols, cns = image.shape
+        mid = rows / 2
+        height = rows / 3
+        n = (cols % height) + 1
+        slide = cols / n
+        starting_point = mid + height / 2
+        small_cropped_img = []
+        for x in range(n):
+            current_point = x * slide
+            small_cropped_img.append((image[current_point:current_point + slide,
+                                      starting_point:starting_point - height:],
+                                      (current_point, starting_point)))
+
+        for an in annots:
+            x1, y1, _, _ = an
+            for sci, sp in small_cropped_img:
+                if sp[0] < x1 < sp[0]+slide :
+                    if sp[1] < y1 < sp[0] + height:
+
+
+
+
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __call__(self, sample, min_side=1080, max_side=1440):
-        image, annots = sample['img'], sample['annot']
+    def __call__(self, sample, min_side=512, max_side=1440):
+        image, annots, name = sample['img'], sample['annot'], sample['name']
 
         rows, cols, cns = image.shape
 
@@ -356,7 +386,7 @@ class Resizer(object):
 
         annots[:, :4] *= scale
 
-        return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale}
+        return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale, 'name': name}
 
 
 class Augmenter(object):
@@ -364,7 +394,7 @@ class Augmenter(object):
 
     def __call__(self, sample, flip_x=0.5):
         if np.random.rand() < flip_x:
-            image, annots = sample['img'], sample['annot']
+            image, annots, name = sample['img'], sample['annot'],  sample['name']
             image = image[:, ::-1, :]
 
             rows, cols, channels = image.shape
@@ -377,7 +407,7 @@ class Augmenter(object):
             annots[:, 0] = cols - x2
             annots[:, 2] = cols - x_tmp
 
-            sample = {'img': image, 'annot': annots}
+            sample = {'img': image, 'annot': annots, 'name':name}
 
         return sample
 
