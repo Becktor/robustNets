@@ -333,25 +333,42 @@ class Crop(object):
     def __call__(self, sample):
         image, annots, name = sample['img'], sample['annot'], sample['name']
         rows, cols, cns = image.shape
-        mid = rows / 2
-        height = rows / 3
-        n = (cols % height) + 1
-        slide = cols / n
-        starting_point = mid + height / 2
-        small_cropped_img = []
+        mid = int(rows / 2)
+        height = int(rows / 3)
+        n = (cols // height) + 1
+        width = int(cols / n)
+        starting_point = int(mid - height / 2)
+        small_cropped_img = {}
         for x in range(n):
-            current_point = x * slide
-            small_cropped_img.append((image[current_point:current_point + slide,
-                                      starting_point:starting_point - height:],
+            current_point = x * width
+            small_cropped_img[x] = ((image[current_point:current_point + width,
+                                      starting_point-height:starting_point:],
                                       (current_point, starting_point)))
-
+        smi = {}
         for an in annots:
-            x1, y1, _, _ = an
-            for sci, sp in small_cropped_img:
-                if sp[0] < x1 < sp[0]+slide :
-                    if sp[1] < y1 < sp[0] + height:
+            x1, y1, x2, y2, lbl = an
+            for key in small_cropped_img:
+                sci, sp = small_cropped_img[key]
+                if sp[0] < x1 < sp[0] + width and sp[1] < y1 < sp[1] + height:
+                    n_x1 = x1 - sp[0]
+                    n_y1 = y1 - sp[1]
+                    n_x2 = n_x1 + width if x2 > sp[0] + width else x2 - sp[0]
+                    n_y2 = n_y1 + height if y2 > sp[1] + height else y2 - sp[1]
 
+                    anno = [n_x1, n_y1, n_x2, n_y2, lbl]
+                    smi.setdefault(key, []).append(anno)
 
+        keys = list(small_cropped_img.keys())
+        key = random.choice(keys)
+        img = small_cropped_img[key][0]
+        val = annots
+        if len(smi) > 0:
+            keys = list(smi.keys())
+            key = random.choice(keys)
+            img = small_cropped_img[key][0]
+            val = smi[key]
+
+        return {'img': img, 'annot': val, 'name': name}
 
 
 class Resizer(object):
@@ -394,7 +411,7 @@ class Augmenter(object):
 
     def __call__(self, sample, flip_x=0.5):
         if np.random.rand() < flip_x:
-            image, annots, name = sample['img'], sample['annot'],  sample['name']
+            image, annots, name = sample['img'], sample['annot'], sample['name']
             image = image[:, ::-1, :]
 
             rows, cols, channels = image.shape
@@ -407,7 +424,7 @@ class Augmenter(object):
             annots[:, 0] = cols - x2
             annots[:, 2] = cols - x_tmp
 
-            sample = {'img': image, 'annot': annots, 'name':name}
+            sample = {'img': image, 'annot': annots, 'name': name}
 
         return sample
 

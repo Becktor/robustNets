@@ -22,7 +22,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from network import retinanet
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
-    Normalizer
+    Normalizer, Crop
 from torch.utils.data import DataLoader
 from network import csv_eval
 from utils import *
@@ -45,8 +45,8 @@ def main(args=None):
 
     parser = parser.parse_args(args)
 
-    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
-                               transform=transforms.Compose([Augmenter(), Resizer()]))
+    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=False,
+                               transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
 
     if parser.csv_val is None:
         dataset_val = None
@@ -59,7 +59,7 @@ def main(args=None):
         dataset_weight = None
         print('No validation annotations provided.')
     else:
-        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=True,
+        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=False,
                                     transform=transforms.Compose([Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
