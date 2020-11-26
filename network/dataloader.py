@@ -114,6 +114,16 @@ class CSVDataset(Dataset):
             sample = self.transform(sample)
         return sample
 
+    def img_anno(self, idx):
+        img = self.load_image(idx)
+        name = self.image_names[idx]
+        annot = self.load_annotations(idx, img.shape)
+
+        sample = {'img': img, 'annot': annot, 'name': name}
+        if self.transform:
+            sample = self.transform(sample)
+        return sample
+
     def load_image(self, image_index):
         img = skimage.io.imread(self.image_names[image_index])
 
@@ -330,21 +340,21 @@ class AddWeather(object):
 class Crop(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __call__(self, sample):
+    def __call__(self, sample, debug=False):
         image, annots, name = sample['img'], sample['annot'], sample['name']
         rows, cols, cns = image.shape
         mid = int(rows / 2)
         height = int(rows / 3)
         n = (cols // height) + 1
         width = int(cols / n)
-        starting_point = int(mid - height / 2)
+        y_sp = int(mid - height / 2)
         small_cropped_img = {}
         for x in range(n):
-            current_point = x * width
-            small_cropped_img[x] = ((image[current_point:current_point + width,
-                                      starting_point-height:starting_point:],
-                                      (current_point, starting_point)))
-        smi = {}
+            x_sp = x * width
+            small_cropped_img[x] = ((image[y_sp:y_sp + height:,
+                                     x_sp:x_sp + width, :], (x_sp, y_sp)))
+
+        sample_crops = {}
         for an in annots:
             x1, y1, x2, y2, lbl = an
             for key in small_cropped_img:
@@ -356,17 +366,27 @@ class Crop(object):
                     n_y2 = n_y1 + height if y2 > sp[1] + height else y2 - sp[1]
 
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
-                    smi.setdefault(key, []).append(anno)
-
+                    sample_crops.setdefault(key, []).append(anno)
+        random.seed(0)
         keys = list(small_cropped_img.keys())
         key = random.choice(keys)
         img = small_cropped_img[key][0]
         val = annots
-        if len(smi) > 0:
-            keys = list(smi.keys())
+        if len(sample_crops) > 0:
+            keys = list(sample_crops.keys())
             key = random.choice(keys)
             img = small_cropped_img[key][0]
-            val = smi[key]
+            val = np.array(sample_crops[key])
+
+        if debug:
+            import matplotlib.pyplot as plt
+            import cv2
+            img2 = img
+            for v in val:
+                img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
+                                 (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
+            plt.imshow(img2)
+            plt.show()
 
         return {'img': img, 'annot': val, 'name': name}
 
@@ -374,7 +394,7 @@ class Crop(object):
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __call__(self, sample, min_side=512, max_side=1440):
+    def __call__(self, sample, min_side=256, max_side=512):
         image, annots, name = sample['img'], sample['annot'], sample['name']
 
         rows, cols, cns = image.shape

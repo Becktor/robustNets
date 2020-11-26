@@ -45,7 +45,7 @@ def main(args=None):
 
     parser = parser.parse_args(args)
 
-    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=False,
+    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
                                transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
 
     if parser.csv_val is None:
@@ -53,16 +53,16 @@ def main(args=None):
         print('No validation annotations provided.')
     else:
         dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                 transform=transforms.Compose([Resizer()]))
+                                 transform=transforms.Compose([Crop(), Resizer()]))
 
     if parser.csv_weight is None:
         dataset_weight = None
         print('No validation annotations provided.')
     else:
-        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=False,
-                                    transform=transforms.Compose([Resizer()]))
+        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=True,
+                                    transform=transforms.Compose([Crop(), Resizer()]))
 
-    sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=False)
+    sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
 
     if dataset_val is not None:
@@ -144,8 +144,8 @@ def main(args=None):
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
-            if loss == torch.tensor(0.).cuda():
-                continue
+#            if loss == torch.tensor(0.).cuda():
+#                continue
             if curr_epoch >= 30:
                 # Line 2 get batch of data
                 # since validation data is small I just fixed them instead of building an iterator
@@ -195,7 +195,7 @@ def main(args=None):
                 if loss == torch.tensor(0.).cuda():
                     zero_loss += 1
 #                    optimizer.zero_grad()
-                    continue
+                    #continue
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 

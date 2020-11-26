@@ -103,6 +103,7 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
         for index in range(len( dataset)):
             data = dataset[index]
             scale = data['scale']
+            annot = data ['annot']
             img = data['img']
 
             # if noise_level > 0:
@@ -159,12 +160,15 @@ def get_annotations(generator):
 
     for i in range(len(generator)):
         # load the annotations
-        img = generator.load_image(i)
-        annotations = generator.load_annotations(i, img.shape)
+        img_anno = generator[i]
+        img = img_anno['img']
+        annotations = img_anno['annot']
+        #img = generator.load_image(i)
+        #annotations = generator.load_annotations(i, img.shape)
 
         # copy detections to all_annotations
         for label in range(generator.num_classes()):
-            all_annotations[i][label] = annotations[annotations[:, 4] == label, :4].copy()
+            all_annotations[i][label] = annotations[annotations[:, 4] == label, :4].numpy().copy()
 
         print('{}/{}'.format(i + 1, len(generator)), end='\r')
 
