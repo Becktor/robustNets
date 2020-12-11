@@ -30,7 +30,6 @@ class CSVDataset(Dataset):
         self.train_file = train_file
         self.class_list = class_list
         self.transform = transform
-
         # parse the provided class file
         try:
             with self._open_for_csv(self.class_list) as file:
@@ -274,7 +273,7 @@ class GaussianBlur(object):
         self.level = level
         self.blur = iaa.Sequential(iaa.blur.GaussianBlur(level))
 
-    def __call__(self, sample):
+    def __call__(self, sample, val=False):
         image, annots = sample['img'], sample['annot']
         if self.level <= 0:
             return {'img': image, 'annot': annots}
@@ -294,7 +293,7 @@ class SAP(object):
         self.per = percentage
         self.sap = iaa.Sequential(iaa.SaltAndPepper(percentage), channel_wise)
 
-    def __call__(self, sample):
+    def __call__(self, sample, val=False):
         image, annots = sample['img'], sample['annot']
         if self.per <= 0:
             return {'img': image, 'annot': annots}
@@ -321,7 +320,7 @@ class AddWeather(object):
         else:
             self.weight = 3 - weight
 
-    def __call__(self, sample):
+    def __call__(self, sample, val=False):
         image, annots = sample['img'], sample['annot']
         if self.weight < 0:
             return {'img': image, 'annot': annots}
@@ -340,42 +339,59 @@ class AddWeather(object):
 class Crop(object):
     """Convert ndarrays in sample to Tensors."""
 
+    def __init__(self, val=False, debug=False):
+        self.val = val
+        self.debug = debug
+        if self.val:
+            random.seed(0)
+
     def __call__(self, sample, debug=False):
         image, annots, name = sample['img'], sample['annot'], sample['name']
         rows, cols, cns = image.shape
-        mid = int(rows / 2)
+        mid = int(rows / 20) * 11
         height = int(rows / 3)
-        n = (cols // height) + 1
+        height += 32 - height % 32
+        n = (cols // height)
         width = int(cols / n)
         y_sp = int(mid - height / 2)
-        small_cropped_img = {}
+
+
+
+        # Create half bbx
+        cr = cols - rows
+        sm1 = image[:, :rows, :]
+        sm2 = image[:, cr:, :]
+        cropped_imgs = {0: (sm1, (0, 0, rows, rows)),
+                        1: (sm2, (cr, 0, rows, rows))}
+
+        # Create small bbx
         for x in range(n):
             x_sp = x * width
-            small_cropped_img[x] = ((image[y_sp:y_sp + height:,
-                                     x_sp:x_sp + width, :], (x_sp, y_sp)))
+            cropped_imgs[x+2] = ((image[y_sp:y_sp + height:,
+                                x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
 
         sample_crops = {}
         for an in annots:
             x1, y1, x2, y2, lbl = an
-            for key in small_cropped_img:
-                sci, sp = small_cropped_img[key]
-                if sp[0] < x1 < sp[0] + width and sp[1] < y1 < sp[1] + height:
+            for key in cropped_imgs:
+                _, sp = cropped_imgs[key]
+                if sp[0] < x1 < sp[0] + sp[2] and sp[1] < y1 < sp[1] + sp[3]:
                     n_x1 = x1 - sp[0]
                     n_y1 = y1 - sp[1]
-                    n_x2 = n_x1 + width if x2 > sp[0] + width else x2 - sp[0]
-                    n_y2 = n_y1 + height if y2 > sp[1] + height else y2 - sp[1]
+                    n_x2 = n_x1 + sp[2] if x2 > sp[0] + sp[2] else x2 - sp[0]
+                    n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
 
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
                     sample_crops.setdefault(key, []).append(anno)
-        random.seed(0)
-        keys = list(small_cropped_img.keys())
+
+        keys = list(cropped_imgs.keys())
         key = random.choice(keys)
-        img = small_cropped_img[key][0]
+        img = cropped_imgs[key][0]
         val = annots
         if len(sample_crops) > 0:
             keys = list(sample_crops.keys())
             key = random.choice(keys)
-            img = small_cropped_img[key][0]
+            img = cropped_imgs[key][0]
             val = np.array(sample_crops[key])
 
         if debug:
@@ -384,7 +400,7 @@ class Crop(object):
             img2 = img
             for v in val:
                 img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
-                                 (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
+                                     (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
             plt.imshow(img2)
             plt.show()
 
@@ -394,7 +410,7 @@ class Crop(object):
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __call__(self, sample, min_side=256, max_side=512):
+    def __call__(self, sample, min_side=384, max_side=512):
         image, annots, name = sample['img'], sample['annot'], sample['name']
 
         rows, cols, cns = image.shape
@@ -414,9 +430,11 @@ class Resizer(object):
         # resize the image with the computed scale
         image = skimage.transform.resize(image, (int(round(rows * scale)), int(round((cols * scale)))))
         rows, cols, cns = image.shape
-
-        pad_w = 32 - rows % 32
-        pad_h = 32 - cols % 32
+        pad_w, pad_h = (0, 0)
+        if rows % 32 != 0:
+            pad_w = 32 - rows % 32
+        if cols % 32 != 0:
+            pad_h = 32 - cols % 32
 
         new_image = np.zeros((rows + pad_w, cols + pad_h, cns)).astype(np.float32)
         new_image[:rows, :cols, :] = image.astype(np.float32)

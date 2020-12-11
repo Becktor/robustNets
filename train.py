@@ -2,7 +2,7 @@ import argparse
 import collections
 import datetime as dt
 import os
-
+from traceback_with_variables import activate_by_import
 import numpy as np
 
 import torch
@@ -37,8 +37,8 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=100)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=6)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=16)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -53,7 +53,7 @@ def main(args=None):
         print('No validation annotations provided.')
     else:
         dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                 transform=transforms.Compose([Crop(), Resizer()]))
+                                 transform=transforms.Compose([Crop(val=True), Resizer()]))
 
     if parser.csv_weight is None:
         dataset_weight = None
@@ -67,12 +67,11 @@ def main(args=None):
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
-        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
+        #dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
 
-    #sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size, drop_last=False)
+    # sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size, drop_last=False)
     dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
                                    shuffle=True)
-
 
     pre_trained = False
     if parser.pre_trained:
@@ -96,7 +95,7 @@ def main(args=None):
         model = model.cuda()
     prev_epoch = 0
     mAP = 0
-    model = model.cuda() #torch.nn.DataParallel(model).cuda()
+    model = model.cuda()  # torch.nn.DataParallel(model).cuda()
     optimizer = optim.Adam(model.params(), lr=1e-3)
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
@@ -117,7 +116,8 @@ def main(args=None):
 
     model.training = True
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=20, gamma=0.1) #CosineAnnealingLR(optimizer, 100)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)  # CosineAnnealingLR(optimizer, 100)
+    scheduler.last_epoch = prev_epoch
     loss_hist = collections.deque(maxlen=500)
     model.train()
     model.freeze_bn()
@@ -128,11 +128,12 @@ def main(args=None):
         model.train()
         model.freeze_bn()
         epoch_loss = []
-        print('============= Starting Epoch {}============\n'.format(curr_epoch))
+        print('============= Starting Epoch {} ============\n'.format(curr_epoch))
         skipped_iters = 0
         zero_loss = 0
         lr = get_lr(optimizer)
-        if epoch_num > 0:
+
+        if curr_epoch > 0:
             scheduler.step()
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
@@ -140,13 +141,12 @@ def main(args=None):
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
 
-
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
-#            if loss == torch.tensor(0.).cuda():
-#                continue
-            if curr_epoch >= 30:
+            #           if loss == torch.tensor(0.).cuda():
+            #                continue
+            if curr_epoch >= 25:
                 # Line 2 get batch of data
                 # since validation data is small I just fixed them instead of building an iterator
                 # initialize a dummy network for the meta learning of the weights
@@ -194,15 +194,14 @@ def main(args=None):
 
                 if loss == torch.tensor(0.).cuda():
                     zero_loss += 1
-#                    optimizer.zero_grad()
-                    #continue
+            #                    optimizer.zero_grad()
+            # continue
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
 
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
 
@@ -217,7 +216,7 @@ def main(args=None):
 
             del classification_loss
             del regression_loss
-            #except Exception as e:
+            # except Exception as e:
             #    print(e)
             #    continue
 
@@ -225,8 +224,6 @@ def main(args=None):
             print('Evaluating dataset')
 
             _ap, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
-
-
 
         # Write to Tensorboard
         writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
@@ -247,6 +244,7 @@ def main(args=None):
             'epoch': curr_epoch + 1,
             'state_dict': model.state_dict(),
             'optimizer': optimizer.state_dict(),
+            'scheduler': scheduler.state_dict(),
             'buoy_AP': rl[2][1],
             'boat_AP': rl[3][1],
             'mAP': rl[4]

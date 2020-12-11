@@ -15,7 +15,7 @@ def main(fn):
             csvFile = csv.reader(file)
             # displaying the contents of the CSV file
             cntr = 0
-            pn = 'joined_hpc.csv'
+            pn = 'joined_jobe.csv'
             for lines in csvFile:
                 name = os.path.split(lines[0])[-1]
                 name = os.path.join(path, name)
@@ -35,8 +35,8 @@ def main(fn):
 
 
 if __name__ == '__main__':
-    csvs_path = {r'Z:\Shippinglab\Raymarine20200611.csv': r'\work1\jbibe\20200611',
-                 r'Z:\Shippinglab\Raymarine20200612.csv': r'\work1\jbibe\20200612',
-                 r'Z:\Shippinglab\mmdet\rgb_train.csv': r'\work1\jbibe\mmdet\2019_04_12_data'}
+    csvs_path = {r'Z:\Shippinglab\Raymarine20200611.csv': r'Z:\Shippinglab\20200611',
+                 r'Z:\Shippinglab\Raymarine20200612.csv': r'Z:\Shippinglab\20200612',
+                 r'Z:\Shippinglab\mmdet\rgb_train.csv': r'Z:\Shippinglab\mmdet\2019_04_12_data'}
 
     main(csvs_path)

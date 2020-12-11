@@ -51,7 +51,7 @@ def _compute_ap(recall, precision, noise=0, label="", plot=False):
         fig = plt.figure(figsize=(4, 4))
         ax = fig.add_subplot(111)
         label_str = "Buoy" if label == 0 else "Boat"
-        if noise <=0.0:
+        if noise <= 0.0:
             ax.set_title("Precision-Recall curve of {}".format(label_str, noise), loc='center', y=1.07)
         else:
             ax.set_title("Precision-Recall curve of {} with noise {}".format(label_str, noise), loc='center', y=1.07)
@@ -95,17 +95,19 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
         A list of lists containing the detections for each image in the generator.
     """
     all_detections = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
-
+    all_annotations = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
     model.eval()
 
     with torch.no_grad():
 
-        for index in range(len( dataset)):
+        for index in range(len(dataset)):
             data = dataset[index]
             scale = data['scale']
-            annot = data ['annot']
+            annotation = data['annot'].numpy()
             img = data['img']
 
+            for label in range(dataset.num_classes()):
+                all_annotations[index][label] = annotation[annotation[:, 4] == label, :4].copy()
             # if noise_level > 0:
             #   img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
 
@@ -116,7 +118,20 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
             boxes = boxes.cpu().numpy()
 
             # correct boxes for image scale
-            boxes /= scale
+            #boxes /= scale
+            debug = False
+
+            if debug:
+                import matplotlib.pyplot as plt
+                import cv2
+                img2 = img.numpy()
+                bs = zip(boxes, scores)
+                for v, s in bs:
+                    if s > 0.3:
+                        img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])), (int(v[2]), int(v[3])),color=(0,0,1), thickness=2)
+                plt.imshow(img2)
+                plt.show()
+
 
             # select indices which have a score above the threshold
             indices = np.where(scores > score_threshold)[0]
@@ -144,7 +159,7 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
 
             print('{}/{}'.format(index + 1, len(dataset)), end='\r')
 
-    return all_detections
+    return all_detections, all_annotations
 
 
 def get_annotations(generator):
@@ -160,15 +175,13 @@ def get_annotations(generator):
 
     for i in range(len(generator)):
         # load the annotations
-        img_anno = generator[i]
-        img = img_anno['img']
-        annotations = img_anno['annot']
-        #img = generator.load_image(i)
-        #annotations = generator.load_annotations(i, img.shape)
+
+        img = generator.load_image(i)
+        annotations = generator.load_annotations(i, img.shape)
 
         # copy detections to all_annotations
         for label in range(generator.num_classes()):
-            all_annotations[i][label] = annotations[annotations[:, 4] == label, :4].numpy().copy()
+            all_annotations[i][label] = annotations[annotations[:, 4] == label, :4].copy()
 
         print('{}/{}'.format(i + 1, len(generator)), end='\r')
 
@@ -202,14 +215,14 @@ def evaluate(
 
     # gather all detections and annotations
     if not detections:
-        all_detections = get_detections(generator, model, score_threshold=score_threshold,
-                                        max_detections=max_detections)
-        all_annotations = get_annotations(generator)
+        all_detections, all_annotations = get_detections(generator, model, score_threshold=score_threshold,
+                                                         max_detections=max_detections)
+        # all_annotations = get_annotations(generator)
     else:
         all_detections = detections
         all_annotations = annotations
 
-    return_list = {0:(0,0,0), 1:(0,0,0), 2:(0,0), 3:(0,0), 4:0}
+    return_list = {0: (0, 0, 0), 1: (0, 0, 0), 2: (0, 0), 3: (0, 0), 4: 0}
     average_precisions = {}
     conf_matrix = {}
     print('\nRecall and Precision', file=f)
@@ -278,7 +291,7 @@ def evaluate(
         label_name = generator.label_to_name(label)
         map_list.append(average_precisions[label][0])
         print('{}: {}'.format(label_name, average_precisions[label][0]), file=f)
-        return_list[2+label] = (label_name, average_precisions[label][0])
+        return_list[2 + label] = (label_name, average_precisions[label][0])
     print('\nmAP: {}'.format(np.mean(map_list)), file=f)
     return_list[4] = np.mean(map_list)
     print('-----------------------------', file=f)
