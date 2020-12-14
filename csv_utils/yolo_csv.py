@@ -52,7 +52,7 @@ def main(fn):
 
 
     # name of csv file
-    filename = "Raymarine20200611.csv"
+    filename = "../csvs/Raymarine20200611.csv"
     # writing to csv file
     with open(filename, 'w', newline="") as csvfile:
         # creating a csv writer object

@@ -1,6 +1,4 @@
 import os
-from os import walk, getcwd
-from PIL import Image
 import csv
 
 IMAGE_SIZE = (1920, 1080)

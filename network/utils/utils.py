@@ -3,7 +3,7 @@ import torch
 import torch.nn as nn
 
 from network.activations import *
-from meta_layers import MetaModule, MetaConv2d, MetaBatchNorm2d
+from network.layers.meta_layers import MetaModule, MetaConv2d, MetaBatchNorm2d
 
 
 class BasicBlock(MetaModule):

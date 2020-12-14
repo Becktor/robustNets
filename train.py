@@ -1,28 +1,12 @@
 import argparse
 import collections
 import datetime as dt
-import os
-from traceback_with_variables import activate_by_import
 import numpy as np
-
-import torch
-
-from network.activations import GroupSort, MaxMin
-from network.layers.bjork_conv2d import BjorckConv2d
-from meta_layers import MetaConv2d
-
-if os.name == 'nt':
-    import ctypes
-
-    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
-
 import torch.optim as optim
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
-
 from network import retinanet
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, \
-    Normalizer, Crop
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop
 from torch.utils.data import DataLoader
 from network import csv_eval
 from utils import *

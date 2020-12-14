@@ -3,16 +3,12 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-from torch import Tensor
-from torch.nn import Conv2d
 from torchvision.ops import nms
 
 from network import losses
-from network.activations import *
 from network.anchors import Anchors
-from network.layers.bjork_conv2d import BjorckConv2d
 from network.utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
-from meta_layers import MetaBatchNorm2d, MetaConv2d, MetaModule
+from network.layers.meta_layers import MetaBatchNorm2d, MetaConv2d, MetaModule
 
 model_urls = {
     'resnet18': 'https://download.pytorch.org/models/resnet18-5c106cde.pth',
