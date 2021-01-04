@@ -1,25 +1,13 @@
 import argparse
 import os
-import time
 
-import cv2
-import numpy as np
 import torch
-
-if os.name == 'nt':
-    import ctypes
-
-    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
-from network import retinanet, csv_eval
-from torch.utils.data import DataLoader
 from torchvision import transforms
+from network.dataloader import CSVDataset, Resizer, Crop
+from network import csv_eval, retinanet
+from utils import *
+import network.layers.meta_layers
 
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, UnNormalizer, Normalizer
-
-assert torch.__version__.split('.')[0] == '1'
-
-
-# print('CUDA available: {}'.format(torch.cuda.is_available()))
 
 def main(args=None, model=None):
     parser = argparse.ArgumentParser(description='Validation script for RetinaNet network.')
@@ -30,10 +18,8 @@ def main(args=None, model=None):
     parser = parser.parse_args(args)
 
     dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                             transform=transforms.Compose([Normalizer(), Resizer()]))
-
-    model = torch.load(parser.model)
-
+                             transform=transforms.Compose([Crop(val=True), Resizer()]))
+    model = retinanet.resnet18(num_classes=dataset_val.num_classes())
     use_gpu = True
 
     if use_gpu:
@@ -45,6 +31,8 @@ def main(args=None, model=None):
     else:
         model = torch.nn.DataParallel(model)
 
+    model, _, _ = load_ckp(parser.model, model)
+    #model = model2.load(parser.model)
     model.eval()
 
     print('Evaluating dataset')

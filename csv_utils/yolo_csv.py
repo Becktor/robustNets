@@ -4,8 +4,9 @@ from PIL import Image
 import csv
 
 IMAGE_SIZE = (1920, 1080)
-ship_buoy = { 1: 'buoy',
-              0: 'boat'}
+ship_buoy = {1: 'buoy',
+             0: 'boat',
+             2: 'harbour'}
 
 
 def x1x2y1y2_xywh(box):
@@ -47,12 +48,13 @@ def main(fn):
             else:
                 name = filename[:-4] + '.bmp'
                 tmp = convert(data)
+
                 for t in tmp:
+                    if t[4] == 'harbour': continue
                     converted.append([name, t[0], t[1], t[2], t[3], t[4]])
 
-
     # name of csv file
-    filename = "../csvs/Raymarine20200611.csv"
+    filename = "csvs/Raymarine20200612_v2.csv"
     # writing to csv file
     with open(filename, 'w', newline="") as csvfile:
         # creating a csv writer object
@@ -61,7 +63,6 @@ def main(fn):
         csvwriter.writerows(converted)
 
 
-
 if __name__ == '__main__':
-    fn = r'C:\Users\Jobe\Downloads\task_raymarine_20200611-2020_11_10_12_52_44-yolo 1.1\obj_train_data\jobe_gbar\20200611'
+    fn = r'C:\Users\Jobe\Downloads\task_raymarine 20200612-2020_12_06_10_42_26-yolo 1.1\obj_train_data\jobe_gbar\20200612'
     main(fn)

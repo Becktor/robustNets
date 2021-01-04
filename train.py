@@ -5,10 +5,9 @@ import numpy as np
 import torch.optim as optim
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
-from network import retinanet
+from network import retinanet, csv_eval
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop
 from torch.utils.data import DataLoader
-from network import csv_eval
 from utils import *
 
 assert torch.__version__.split('.')[0] == '1'
@@ -235,6 +234,7 @@ def main(args=None):
         }
 
         if rl[4] > mAP:
+            mAP = rl[4]
             save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)
         else:
             save_ckp(checkpoint, model, False, checkpoint_dir, curr_epoch)
