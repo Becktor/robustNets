@@ -81,7 +81,7 @@ def _compute_ap(recall, precision, noise=0, label="", plot=False):
     return ap
 
 
-def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
+def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, noise_level=0.0):
     """ Get the detections from the network using the generator.
     The result is a list of lists such that the size is:
         all_detections[num_images][num_classes] = detections[num_detections, 4 + num_classes]
@@ -94,31 +94,36 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
     # Returns
         A list of lists containing the detections for each image in the generator.
     """
-    all_detections = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
-    all_annotations = [[None for i in range(dataset.num_classes())] for j in range(len(dataset))]
+    dataset = []
+    for index, data in enumerate(dataloader):
+        annotation = data['annot'].numpy()
+        img = data['img']
+        for i in range(img.shape[0]):
+            elem = {'annot': annotation[i], 'img': img[i]}
+            dataset.append(elem)
+    ds = dataloader.dataset
+    all_detections = [[None for i in range(ds.num_classes())] for j in range(len(dataset))]
+    all_annotations = [[None for i in range(ds.num_classes())] for j in range(len(dataset))]
     model.eval()
 
     with torch.no_grad():
-
-        for index in range(len(dataset)):
-            data = dataset[index]
-            scale = data['scale']
-            annotation = data['annot'].numpy()
+        for index, data in enumerate(dataset):
+            annotation = data['annot']
             img = data['img']
 
-            for label in range(dataset.num_classes()):
+            for label in range(ds.num_classes()):
                 all_annotations[index][label] = annotation[annotation[:, 4] == label, :4].copy()
             # if noise_level > 0:
             #   img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
 
             # run network
-            scores, labels, boxes = model(img.permute(2, 0, 1).cuda().float().unsqueeze(dim=0))
+            scores, labels, boxes = model(img.cuda().float().unsqueeze(dim=0))
             scores = scores.cpu().numpy()
             labels = labels.cpu().numpy()
             boxes = boxes.cpu().numpy()
 
             # correct boxes for image scale
-            #boxes /= scale
+            # boxes /= scale
             debug = False
 
             if debug:
@@ -128,10 +133,10 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
                 bs = zip(boxes, scores)
                 for v, s in bs:
                     if s > 0.3:
-                        img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])), (int(v[2]), int(v[3])),color=(0,0,1), thickness=2)
+                        img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])), (int(v[2]), int(v[3])), color=(0, 0, 1),
+                                             thickness=2)
                 plt.imshow(img2)
                 plt.show()
-
 
             # select indices which have a score above the threshold
             indices = np.where(scores > score_threshold)[0]
@@ -150,11 +155,11 @@ def get_detections(dataset, model, score_threshold=0.05, max_detections=100, noi
                     [image_boxes, np.expand_dims(image_scores, axis=1), np.expand_dims(image_labels, axis=1)], axis=1)
 
                 # copy detections to all_detections
-                for label in range(dataset.num_classes()):
+                for label in range(ds.num_classes()):
                     all_detections[index][label] = image_detections[image_detections[:, -1] == label, :-1]
             else:
                 # copy detections to all_detections
-                for label in range(dataset.num_classes()):
+                for label in range(ds.num_classes()):
                     all_detections[index][label] = np.zeros((0, 5))
 
             print('{}/{}'.format(index + 1, len(dataset)), end='\r')
@@ -226,13 +231,13 @@ def evaluate(
     average_precisions = {}
     conf_matrix = {}
     print('\nRecall and Precision', file=f)
-    for label in range(generator.num_classes()):
+    for label in range(generator.dataset.num_classes()):
         false_positives = np.zeros((0,))
         true_positives = np.zeros((0,))
         scores = np.zeros((0,))
         num_annotations = 0.0
 
-        for i in range(len(generator)):
+        for i in range(len(all_detections)):
             detections = all_detections[i][label]
             annotations = all_annotations[i][label]
             num_annotations += annotations.shape[0]
@@ -275,7 +280,7 @@ def evaluate(
         # compute recall and precision
         recall = true_positives / num_annotations
         precision = true_positives / np.maximum(true_positives + false_positives, np.finfo(np.float64).eps)
-        label_name = generator.label_to_name(label)
+        label_name = generator.dataset.label_to_name(label)
         print(label_name)
         print("Recall: {}".format(max(recall, default=float('NaN'))), file=f)
         print("Precision: {}".format(min(precision, default=float('NaN'))), file=f)
@@ -287,8 +292,8 @@ def evaluate(
 
     print('\nAP:', file=f)
     map_list = []
-    for label in range(generator.num_classes()):
-        label_name = generator.label_to_name(label)
+    for label in range(generator.dataset.num_classes()):
+        label_name = generator.dataset.label_to_name(label)
         map_list.append(average_precisions[label][0])
         print('{}: {}'.format(label_name, average_precisions[label][0]), file=f)
         return_list[2 + label] = (label_name, average_precisions[label][0])

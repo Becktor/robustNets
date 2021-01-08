@@ -217,7 +217,7 @@ class CSVDataset(Dataset):
 def collater(data):
     imgs = [s['img'] for s in data]
     annots = [s['annot'] for s in data]
-    scales = [s['scale'] for s in data]
+    #scales = [s['scale'] for s in data]
     names = [s['name'] for s in data]
 
     widths = [int(s.shape[0]) for s in imgs]
@@ -250,7 +250,94 @@ def collater(data):
 
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
-    return {'img': padded_imgs, 'annot': annot_padded, 'scale': scales, 'name': names}
+    return {'img': padded_imgs, 'annot': annot_padded,  'name': names}
+
+
+def crop_collater_for_validation(data):
+    imgs = [s['img'] for s in data]
+    annots = [s['annot'] for s in data]
+    names = [s['name'] for s in data]
+    batch_size = len(imgs)
+    cropped_batch_img = []
+    cropped_batch_annots = []
+    max_num_annots = max(a.shape[0] for a in annots)
+    for key in range(batch_size):
+        newCrop = []
+        image = imgs[key]
+        annotation = annots[key]
+        rows, cols, cns = image.shape
+        mid = int(rows / 20) * 11
+        height = int(rows / 3)
+        height += 32 - height % 32
+        n = (cols // height)
+        width = height
+        y_sp = int(mid - height / 2)
+
+        # Create half bbx
+        cr = cols - rows
+        sm1 = image[:, :rows, :]
+        sm2 = image[:, cr:, :]
+
+        cropped_imgs = {0: (sm1, (0, 0, rows, rows)),
+                        1: (sm2, (cr, 0, rows, rows))}
+
+        # Create small bbx
+        for x in range(n):
+            x_sp = x * width
+            cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
+                                    x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
+
+        sample_crops = {}
+        scale = height/rows
+        for an in annotation:
+            x1, y1, x2, y2, lbl = an
+            for key in cropped_imgs:
+                img, sp = cropped_imgs[key]
+                if sp[0] < x1 < sp[0] + sp[2] and sp[1] < y1 < sp[1] + sp[3]:
+                    n_x1 = x1 - sp[0]
+                    n_y1 = y1 - sp[1]
+                    n_x2 = n_x1 + sp[2] if x2 > sp[0] + sp[2] else x2 - sp[0]
+                    n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
+
+                    anno = np.array([n_x1, n_y1, n_x2, n_y2, lbl])
+                    if (key == 0) or (key == 1):
+                        anno[:4] *= scale
+                    sample_crops.setdefault(key, []).append(anno)
+        sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
+        sm2 = skimage.transform.resize(sm2, (int(height), int(round(width))))
+
+        i, s = cropped_imgs[0]
+        cropped_imgs[0] = (sm1, s)
+        cropped_imgs[1] = (sm2, s)
+
+        for key in cropped_imgs:
+            img, sp = cropped_imgs[key]
+            image = torch.FloatTensor(img)
+            newAnno = []
+            if key in sample_crops:
+                an = sample_crops[key]
+                annot = torch.FloatTensor(an)
+                newAnno = annot
+            newCrop.append((image, newAnno))
+
+        torch_imgs = torch.zeros(len(newCrop), width, height, 3)
+        torch_annots = torch.ones((len(newCrop), max_num_annots, 5)) * -1
+
+        for i in range(len(newCrop)):
+            img, an = newCrop[i]
+            torch_imgs[i, :int(img.shape[0]), :int(img.shape[1]), :] = img
+
+            if max_num_annots > 0:
+                if len(an) > 0:
+                    torch_annots[i, :an.shape[0], :] = an
+
+        torch_imgs = torch_imgs.permute(0, 3, 1, 2)
+        cropped_batch_img.append(torch_imgs)
+        cropped_batch_annots.append(torch_annots)
+    cropped_batch_img = torch.cat(cropped_batch_img, dim=0)
+    cropped_batch_annots = torch.cat(cropped_batch_annots, dim=0)
+
+    return {'img': cropped_batch_img, 'annot': cropped_batch_annots, 'name': names}
 
 
 class Gaussian(object):
@@ -339,9 +426,10 @@ class AddWeather(object):
 class Crop(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __init__(self, val=False, debug=False):
+    def __init__(self, val=False, debug=False, forSampler=False):
         self.val = val
         self.debug = debug
+        self.sampler = forSampler
         if self.val:
             random.seed(0)
 
@@ -355,8 +443,6 @@ class Crop(object):
         width = int(cols / n)
         y_sp = int(mid - height / 2)
 
-
-
         # Create half bbx
         cr = cols - rows
         sm1 = image[:, :rows, :]
@@ -367,8 +453,8 @@ class Crop(object):
         # Create small bbx
         for x in range(n):
             x_sp = x * width
-            cropped_imgs[x+2] = ((image[y_sp:y_sp + height:,
-                                x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
+            cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
+                                    x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
 
         sample_crops = {}
         for an in annots:
@@ -529,3 +615,76 @@ class AspectRatioBasedSampler(Sampler):
         # divide into groups, one group = one batch
         return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
                 range(0, len(order), self.batch_size)]
+
+
+class CropSampler(Sampler):
+
+    def __init__(self, data_source, batch_size):
+        super().__init__(data_source)
+        self.data_source = data_source
+        self.batch_size = batch_size
+        self.groups = self.group_images()
+        self.gg = self.crop_retAll()
+
+    def __iter__(self):
+        random.shuffle(self.groups)
+        for group in self.groups:
+            yield group
+
+    def __len__(self):
+        return (len(self.data_source) + self.batch_size - 1) // self.batch_size
+
+    def group_images(self):
+        # determine the order of the images
+        order = list(range(len(self.data_source)))
+        order.sort(key=lambda x: self.data_source.image_aspect_ratio(x))
+
+        # divide into groups, one group = one batch
+        return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
+                range(0, len(order), self.batch_size)]
+
+    def crop_retAll(self):
+        ss = list(self.data_source)
+        image, annots, name = self.data_source['img'], self.data_source['annot'], self.data_source['name']
+        rows, cols, cns = image.shape
+        mid = int(rows / 20) * 11
+        height = int(rows / 3)
+        height += 32 - height % 32
+        n = (cols // height)
+        width = int(cols / n)
+        y_sp = int(mid - height / 2)
+
+        # Create half bbx
+        cr = cols - rows
+        sm1 = image[:, :rows, :]
+        sm2 = image[:, cr:, :]
+        cropped_imgs = {0: (sm1, (0, 0, rows, rows)),
+                        1: (sm2, (cr, 0, rows, rows))}
+
+        # Create small bbx
+        for x in range(n):
+            x_sp = x * width
+            cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
+                                    x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
+
+        sample_crops = {}
+        for an in annots:
+            x1, y1, x2, y2, lbl = an
+            for key in cropped_imgs:
+                _, sp = cropped_imgs[key]
+                if sp[0] < x1 < sp[0] + sp[2] and sp[1] < y1 < sp[1] + sp[3]:
+                    n_x1 = x1 - sp[0]
+                    n_y1 = y1 - sp[1]
+                    n_x2 = n_x1 + sp[2] if x2 > sp[0] + sp[2] else x2 - sp[0]
+                    n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
+
+                    anno = [n_x1, n_y1, n_x2, n_y2, lbl]
+                    sample_crops.setdefault(key, []).append(anno)
+
+        img = cropped_imgs
+        val = annots
+        if len(sample_crops) > 0:
+            keys = list(sample_crops.keys())
+            key = random.choice(keys)
+            img = cropped_imgs[key][0]
+            val = np.array(sample_crops[key])

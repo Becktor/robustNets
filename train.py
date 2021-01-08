@@ -6,7 +6,7 @@ import torch.optim as optim
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, CropSampler, crop_collater_for_validation
 from torch.utils.data import DataLoader
 from utils import *
 
@@ -35,22 +35,22 @@ def main(args=None):
         dataset_val = None
         print('No validation annotations provided.')
     else:
-        dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                 transform=transforms.Compose([Crop(val=True), Resizer()]))
+        dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes)
 
     if parser.csv_weight is None:
         dataset_weight = None
         print('No validation annotations provided.')
     else:
         dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=True,
-                                    transform=transforms.Compose([Crop(), Resizer()]))
+                                    transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
 
     if dataset_val is not None:
-        sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=False)
-        #dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=collater, batch_sampler=sampler_val)
+        sampler_val = AspectRatioBasedSampler(dataset_val,  batch_size=1, drop_last=True)
+        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater_for_validation, batch_sampler=sampler_val)
+
 
     # sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size, drop_last=False)
     dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
@@ -123,15 +123,13 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
-
+            names = data['name']
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
-            #           if loss == torch.tensor(0.).cuda():
-            #                continue
+
             if curr_epoch >= 25:
                 # Line 2 get batch of data
-                # since validation data is small I just fixed them instead of building an iterator
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
                 meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
@@ -190,7 +188,7 @@ def main(args=None):
 
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
-            if iter_num % 1 == 0:
+            if iter_num % 2 == 0:
                 print(
                     'Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | '
                     'Running loss: {:1.5f} | Skipped Iterations & 0 loss: {} {}'.format(
@@ -206,7 +204,7 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            _ap, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
+            _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)
 
         # Write to Tensorboard
         writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
