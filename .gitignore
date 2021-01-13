@@ -3,6 +3,7 @@
 trained_models/
 .idea/
 figures/
+wandb/
 network/*.png
 network/*.txt
 #file

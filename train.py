@@ -6,9 +6,12 @@ import torch.optim as optim
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, CropSampler, crop_collater_for_validation
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, CropSampler, \
+    crop_collater_for_validation
 from torch.utils.data import DataLoader
 from utils import *
+import wandb
+import time
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -21,13 +24,26 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=16)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=20)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
 
     parser = parser.parse_args(args)
+    # torch.backends.cudnn.benchmark = True
+    wandb.init(project="reweight", config={
+        "learning_rate": 1e-3,
+        "ResNet": 34,
+        "reweight": 25,
+        "step_size": 50,
+        "gamma": 0.1,
+        "pre_trained": parser.pre_trained
+    })
+    config = wandb.config
 
+    """
+    Data loaders
+    """
     dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
                                transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
 
@@ -45,14 +61,14 @@ def main(args=None):
                                     transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
-    dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater, batch_sampler=sampler)
+    dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater,
+                                  batch_sampler=sampler)
 
     if dataset_val is not None:
-        sampler_val = AspectRatioBasedSampler(dataset_val,  batch_size=1, drop_last=True)
-        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater_for_validation, batch_sampler=sampler_val)
+        sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
+        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater_for_validation,
+                                    batch_sampler=sampler_val)
 
-
-    # sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size, drop_last=False)
     dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
                                    shuffle=True)
 
@@ -76,37 +92,42 @@ def main(args=None):
     use_gpu = True
     if use_gpu:
         model = model.cuda()
-    prev_epoch = 0
-    mAP = 0
-    model = model.cuda()  # torch.nn.DataParallel(model).cuda()
-    optimizer = optim.Adam(model.params(), lr=1e-3)
+    model = model.cuda()
+    """
+       Optimizer
+    """
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
+    optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
+                                          gamma=config.gamma)
+    prev_epoch = 0
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
-        writer = SummaryWriter(checkpoint_dir + "/tb_event")
-        dataiter = iter(dataloader_weight)
-        data = dataiter.next()
-        writer.add_graph(model, data['img'].cuda().float())
 
     else:
         model, optimizer, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer)
         checkpoint_dir = parser.continue_training
-        writer = SummaryWriter(checkpoint_dir + "/tb_event")
         prev_epoch = checkpoint_dict['epoch']
-        mAP = checkpoint_dict['mAP']
+
+        # mAP = checkpoint_dict['mAP']
+    wandb.watch(model)
+    scheduler.last_epoch = prev_epoch
+    loss_hist = collections.deque(maxlen=500)
 
     model.training = True
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=50, gamma=0.1)  # CosineAnnealingLR(optimizer, 100)
-    scheduler.last_epoch = prev_epoch
-    loss_hist = collections.deque(maxlen=500)
     model.train()
     model.freeze_bn()
-    print('Num training images: {}'.format(len(dataset_train)))
+    n_iters = len(dataset_train)/parser.batch_size
+    print('Num training images: {} and num itr: {}'.format(len(dataset_train), n_iters))
 
+    zero_tensor = torch.tensor(0.).cuda()
+    mAP = 0
+    #scaler = torch.cuda.amp.GradScaler()
     for epoch_num in range(parser.epochs):
+        t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
         model.train()
         model.freeze_bn()
@@ -123,12 +144,12 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
-            names = data['name']
+            # names = data['name']
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
 
-            if curr_epoch >= 25:
+            if curr_epoch >= config.reweight:
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
@@ -173,10 +194,9 @@ def main(args=None):
                     loss = torch.sum(cost * w)
                     break
 
-                if loss == torch.tensor(0.).cuda():
+                if loss == zero_tensor:
                     zero_loss += 1
-            #                    optimizer.zero_grad()
-            # continue
+
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 
@@ -190,36 +210,35 @@ def main(args=None):
             epoch_loss.append(float(loss))
             if iter_num % 2 == 0:
                 print(
-                    'Epoch: {} | Iteration: {} | Classification loss: {:1.5f} | Regression loss: {:1.5f} | '
-                    'Running loss: {:1.5f} | Skipped Iterations & 0 loss: {} {}'.format(
-                        curr_epoch, iter_num, float(classification_loss), float(regression_loss),
-                        np.mean(loss_hist), skipped_iters, zero_loss), end='\r')
+                    'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
+                    'rl: {:1.5f} | SI & 0 loss: {} {}'.format(iter_num, float(classification_loss),
+                                                              float(regression_loss), np.mean(loss_hist), skipped_iters,
+                                                              zero_loss), end='\r')
 
             del classification_loss
             del regression_loss
-            # except Exception as e:
-            #    print(e)
-            #    continue
-
+        runtime = time.time() - t0
+        print("\nEpoch {} took: {}".format(curr_epoch, runtime))
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
             _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)
 
         # Write to Tensorboard
-        writer.add_scalar("train/running_loss", np.mean(loss_hist), curr_epoch)
+        wandb.log({"train/Epoch_runtime": runtime})
+        wandb.log({"train/running_loss": np.mean(loss_hist)})
 
-        writer.add_scalar("val/Buoy_Recall", rl[0][1], curr_epoch)
-        writer.add_scalar("val/Buoy_Precision", rl[0][2], curr_epoch)
+        wandb.log({"val/Buoy_Recall": rl[0][1]})
+        wandb.log({"val/Buoy_Precision": rl[0][2]})
 
-        writer.add_scalar("val/Boat_Recall", rl[1][1], curr_epoch)
-        writer.add_scalar("val/Boat_Precision", rl[1][2], curr_epoch)
+        wandb.log({"val/Boat_Recall": rl[1][1]})
+        wandb.log({"val/Boat_Precision": rl[1][2]})
 
-        writer.add_scalar("mAP/AP_Buoy", rl[2][1], curr_epoch)
-        writer.add_scalar("mAP/AP_Boat", rl[3][1], curr_epoch)
-        writer.add_scalar("mAP/mAP", rl[4], curr_epoch)
+        wandb.log({"mAP/AP_Buoy": rl[2][1]})
+        wandb.log({"mAP/AP_Boat": rl[3][1]})
+        wandb.log({"mAP/mAP": rl[4]})
 
-        writer.add_scalar("lr/Learning Rate", lr, curr_epoch)
+        wandb.log({"lr/Learning Rate": lr})
 
         checkpoint = {
             'epoch': curr_epoch + 1,
