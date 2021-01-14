@@ -33,7 +33,7 @@ def main(args=None):
     # torch.backends.cudnn.benchmark = True
     wandb.init(project="reweight", config={
         "learning_rate": 1e-3,
-        "ResNet": 34,
+        "ResNet": parser.depth,
         "reweight": 25,
         "step_size": 50,
         "gamma": 0.1,
@@ -77,7 +77,7 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.resnet18(num_classes=dataset_train.num_classes())
+        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
@@ -97,10 +97,13 @@ def main(args=None):
        Optimizer
     """
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
+
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
-                                          gamma=config.gamma)
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
+    #                                       gamma=config.gamma)
+    n_iters = len(dataset_train)/parser.batch_size
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-3, max_lr=1e-2, step_size_up=n_iters, cycle_momentum=False)
     prev_epoch = 0
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
@@ -120,7 +123,7 @@ def main(args=None):
 
     model.train()
     model.freeze_bn()
-    n_iters = len(dataset_train)/parser.batch_size
+
     print('Num training images: {} and num itr: {}'.format(len(dataset_train), n_iters))
 
     zero_tensor = torch.tensor(0.).cuda()
@@ -138,7 +141,7 @@ def main(args=None):
         lr = get_lr(optimizer)
 
         if curr_epoch > 0:
-            scheduler.step()
+
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
         for iter_num, data in enumerate(dataloader_train):
@@ -203,7 +206,7 @@ def main(args=None):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-
+            scheduler.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
 
             loss_hist.append(float(loss))
