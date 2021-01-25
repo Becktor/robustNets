@@ -9,6 +9,10 @@ class MetaModule(nn.Module):
         for name, param in self.named_params(self):
             yield param
 
+    def params_with_names(self):
+        for name, param in self.named_params(self):
+            yield name, param
+
     def named_leaves(self):
         return []
 

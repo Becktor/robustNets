@@ -2,6 +2,7 @@ import os
 import re
 import torch
 from torch.autograd import Variable
+from prettytable import PrettyTable
 
 
 def atoi(text):
@@ -49,3 +50,15 @@ def to_var(x, requires_grad=True):
         x = x.cuda()
     return Variable(x, requires_grad=requires_grad)
 
+
+def count_parameters(model):
+    table = PrettyTable(["Modules", "Parameters"])
+    total_params = 0
+    for name, parameter in model.params_with_names():
+        if not parameter.requires_grad: continue
+        param = parameter.numel()
+        table.add_row([name, param])
+        total_params += param
+    print(table)
+    print(f"Total Trainable Params: {total_params}")
+    return total_params

@@ -31,10 +31,12 @@ def x1x2y1y2xyhw(box):
 
 
 def convert(csv):
-    start = 34
-    name = csv[0][:-4]
+    name = os.path.basename(csv[0])[:-4]
+    if csv[2] == '':
+        return name, [-1,-1,-1,-1,-1]
+
     bbox = [float(i) for i in csv[1:5]]
-    bbox = box_to_pbox(bbox)
+    #bbox = box_to_pbox(bbox)
     x, y, h, w = x1x2y1y2xyhw(bbox)
 
     label = ship_buoy[csv[5]]
@@ -48,23 +50,24 @@ def main(fn):
 
         # displaying the contents of the CSV file
         for lines in csvFile:
-            if lines[2] == '':
-                continue
             name, tmp = convert(lines)
             l, x, y, h, w = tmp
+            if lines[2] == '':
+                continue
+            else:
+                yolo = "{} {:06f} {:06f} {:06f} {:06f}\n".format(l, x, y, h, w)
             print("name: {} -- content {}".format(name, tmp))
-            pn = 't12'
-            yolo = "{} {:06f} {:06f} {:06f} {:06f}\n".format(l, x, y, h, w)
+            pn = '2019_04_12_yolo'
             if not os.path.exists(pn):
                 os.makedirs(pn)
             n = os.path.join(pn, name + '.txt')
-            file = open(n, "a")
-            file.write(yolo)
-            file.close()
+            file2 = open(n, "a")
+            file2.write(yolo)
+            file2.close()
 
 
 if __name__ == '__main__':
-    fn = r'Z:\Shippinglab\mmdet\rgb_train.csv'
-    fn2 = r'Z:\Shippinglab\mmdet\weight_set.csv'
-    fn = r'C:\Users\Jobe\Documents\git\robustNets\20200612-TucoPlatformB.csv'
+    #fn = r'Z:\Shippinglab\mmdet\rgb_train.csv'
+    #fn2 = r'Z:\Shippinglab\mmdet\weight_set.csv'
+    fn = r'Z:\Shippinglab\mmdet\2019_04_12.csv'
     main(fn)

@@ -426,10 +426,10 @@ class AddWeather(object):
 class Crop(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __init__(self, val=False, debug=False, forSampler=False):
+    def __init__(self, val=False, debug=False):
         self.val = val
         self.debug = debug
-        self.sampler = forSampler
+
         if self.val:
             random.seed(0)
 
@@ -440,7 +440,7 @@ class Crop(object):
         height = int(rows / 3)
         height += 32 - height % 32
         n = (cols // height)
-        width = int(cols / n)
+        width = height
         y_sp = int(mid - height / 2)
 
         # Create half bbx
@@ -483,12 +483,16 @@ class Crop(object):
         if debug:
             import matplotlib.pyplot as plt
             import cv2
-            img2 = img
-            for v in val:
-                img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
-                                     (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
-            plt.imshow(img2)
-            plt.show()
+
+            for key in sample_crops:
+                img = cropped_imgs[key][0]
+                val = np.array(sample_crops[key])
+                img2 = img
+                for v in val:
+                    img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
+                                         (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
+                plt.imshow(img2)
+                plt.show()
 
         return {'img': img, 'annot': val, 'name': name}
 
@@ -616,75 +620,3 @@ class AspectRatioBasedSampler(Sampler):
         return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
                 range(0, len(order), self.batch_size)]
 
-
-class CropSampler(Sampler):
-
-    def __init__(self, data_source, batch_size):
-        super().__init__(data_source)
-        self.data_source = data_source
-        self.batch_size = batch_size
-        self.groups = self.group_images()
-        self.gg = self.crop_retAll()
-
-    def __iter__(self):
-        random.shuffle(self.groups)
-        for group in self.groups:
-            yield group
-
-    def __len__(self):
-        return (len(self.data_source) + self.batch_size - 1) // self.batch_size
-
-    def group_images(self):
-        # determine the order of the images
-        order = list(range(len(self.data_source)))
-        order.sort(key=lambda x: self.data_source.image_aspect_ratio(x))
-
-        # divide into groups, one group = one batch
-        return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
-                range(0, len(order), self.batch_size)]
-
-    def crop_retAll(self):
-        ss = list(self.data_source)
-        image, annots, name = self.data_source['img'], self.data_source['annot'], self.data_source['name']
-        rows, cols, cns = image.shape
-        mid = int(rows / 20) * 11
-        height = int(rows / 3)
-        height += 32 - height % 32
-        n = (cols // height)
-        width = int(cols / n)
-        y_sp = int(mid - height / 2)
-
-        # Create half bbx
-        cr = cols - rows
-        sm1 = image[:, :rows, :]
-        sm2 = image[:, cr:, :]
-        cropped_imgs = {0: (sm1, (0, 0, rows, rows)),
-                        1: (sm2, (cr, 0, rows, rows))}
-
-        # Create small bbx
-        for x in range(n):
-            x_sp = x * width
-            cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
-                                    x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
-
-        sample_crops = {}
-        for an in annots:
-            x1, y1, x2, y2, lbl = an
-            for key in cropped_imgs:
-                _, sp = cropped_imgs[key]
-                if sp[0] < x1 < sp[0] + sp[2] and sp[1] < y1 < sp[1] + sp[3]:
-                    n_x1 = x1 - sp[0]
-                    n_y1 = y1 - sp[1]
-                    n_x2 = n_x1 + sp[2] if x2 > sp[0] + sp[2] else x2 - sp[0]
-                    n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
-
-                    anno = [n_x1, n_y1, n_x2, n_y2, lbl]
-                    sample_crops.setdefault(key, []).append(anno)
-
-        img = cropped_imgs
-        val = annots
-        if len(sample_crops) > 0:
-            keys = list(sample_crops.keys())
-            key = random.choice(keys)
-            img = cropped_imgs[key][0]
-            val = np.array(sample_crops[key])

@@ -6,7 +6,7 @@ import torch.optim as optim
 from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
-from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, CropSampler, \
+from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, \
     crop_collater_for_validation
 from torch.utils.data import DataLoader
 from utils import *
@@ -24,7 +24,7 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=20)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=10)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -34,8 +34,8 @@ def main(args=None):
     wandb.init(project="reweight", config={
         "learning_rate": 1e-3,
         "ResNet": parser.depth,
-        "reweight": 525,
-        "step_size": 50,
+        "reweight": 25,
+        "milestones": [10, 75, 100],
         "gamma": 0.1,
         "pre_trained": parser.pre_trained,
         "train_set": parser.csv_train 
@@ -78,7 +78,7 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.rresnet18(num_classes=dataset_train.num_classes())#, pretrained=pre_trained)
+        model = retinanet.rresnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
@@ -99,12 +99,15 @@ def main(args=None):
     """
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
+    count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
-                                           gamma=config.gamma)
-    n_iters = len(dataset_train)/parser.batch_size
-    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-4, max_lr=1e-3, step_size_up=n_iters*2, cycle_momentum=False)
+    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
+                                          gamma=config.gamma)
+    n_iters = len(dataset_train) / parser.batch_size
+    # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-4,
+    #                                        step_size_up=n_iters, cycle_momentum=False)
+
     prev_epoch = 0
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
@@ -129,7 +132,7 @@ def main(args=None):
 
     zero_tensor = torch.tensor(0.).cuda()
     mAP = 0
-    #scaler = torch.cuda.amp.GradScaler()
+
     for epoch_num in range(parser.epochs):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
@@ -142,7 +145,6 @@ def main(args=None):
         lr = get_lr(optimizer)
 
         if curr_epoch > 0:
-
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
         for iter_num, data in enumerate(dataloader_train):
@@ -207,20 +209,21 @@ def main(args=None):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            #scheduler.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
 
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
             if iter_num % 2 == 0:
+                lr = get_lr(optimizer)
                 print(
                     'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
-                    'rl: {:1.5f} | SI & 0 loss: {} {}'.format(iter_num, float(classification_loss),
-                                                              float(regression_loss), np.mean(loss_hist), skipped_iters,
-                                                              zero_loss), end='\r')
+                    'rl: {:1.5f} | SI : {} LR: {}'.format(iter_num, float(classification_loss),
+                                                          float(regression_loss), np.mean(loss_hist), skipped_iters,
+                                                          float(lr)), end='\r')
 
             del classification_loss
             del regression_loss
+        scheduler.step()
         runtime = time.time() - t0
         scheduler.step()
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
