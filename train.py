@@ -34,10 +34,11 @@ def main(args=None):
     wandb.init(project="reweight", config={
         "learning_rate": 1e-3,
         "ResNet": parser.depth,
-        "reweight": 25,
+        "reweight": 525,
         "step_size": 50,
         "gamma": 0.1,
-        "pre_trained": parser.pre_trained
+        "pre_trained": parser.pre_trained,
+        "train_set": parser.csv_train 
     })
     config = wandb.config
 
@@ -77,7 +78,7 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.rresnet18(num_classes=dataset_train.num_classes())#, pretrained=pre_trained)
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
@@ -100,10 +101,10 @@ def main(args=None):
 
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
-    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
-    #                                       gamma=config.gamma)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
+                                           gamma=config.gamma)
     n_iters = len(dataset_train)/parser.batch_size
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-3, max_lr=1e-2, step_size_up=n_iters, cycle_momentum=False)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-4, max_lr=1e-3, step_size_up=n_iters*2, cycle_momentum=False)
     prev_epoch = 0
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
@@ -156,7 +157,7 @@ def main(args=None):
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
-                meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
+                meta_model = retinanet.rresnet18(num_classes=dataset_train.num_classes())
                 meta_model.load_state_dict(model.state_dict())
                 if torch.cuda.is_available():
                     meta_model.cuda()
@@ -206,7 +207,7 @@ def main(args=None):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            #scheduler.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
 
             loss_hist.append(float(loss))
@@ -221,6 +222,7 @@ def main(args=None):
             del classification_loss
             del regression_loss
         runtime = time.time() - t0
+        scheduler.step()
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
         if parser.csv_val is not None:
             print('Evaluating dataset')

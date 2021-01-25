@@ -423,6 +423,14 @@ class ResNetReduced(MetaModule):
             return [nms_scores, nms_class, transformed_anchors[0, anchors_nms_idx, :]]
 
 
+def rresnet18(num_classes, pretrained=False, **kwargs):
+    """Constructs a ResNet-18 model.
+    Args:
+        pretrained (bool): If True, returns a model pre-trained on ImageNet
+    """
+    model = ResNetReduced(num_classes, BasicBlock, [2, 2, 2, 2], **kwargs)
+    return model
+
 def resnet18(num_classes, pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.
     Args:

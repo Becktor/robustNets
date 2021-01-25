@@ -22,11 +22,11 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o reweight.out
-#BSUB -e reweight.err
+#BSUB -o reweight_%J.out
+#BSUB -e reweight_%J.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/mmdet/fix_annotations_rgb_train.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/mmdet/rgb_weight.csv --batch_size=8 --continue_training ~/git/robustNets/trained_models/model310_1459
+python train.py --csv_train /work1/jbibe/orig.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc.csv --batch_size=64
