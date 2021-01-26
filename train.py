@@ -32,9 +32,9 @@ def main(args=None):
     parser = parser.parse_args(args)
     # torch.backends.cudnn.benchmark = True
     wandb.init(project="reweight", config={
-        "learning_rate": 1e-3,
+        "learning_rate": 1e-4,
         "ResNet": parser.depth,
-        "reweight": 25,
+        "reweight": 525,
         "milestones": [10, 75, 100],
         "gamma": 0.1,
         "pre_trained": parser.pre_trained,
@@ -78,7 +78,7 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.rresnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
@@ -159,7 +159,7 @@ def main(args=None):
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
-                meta_model = retinanet.rresnet18(num_classes=dataset_train.num_classes())
+                meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
                 meta_model.load_state_dict(model.state_dict())
                 if torch.cuda.is_available():
                     meta_model.cuda()
