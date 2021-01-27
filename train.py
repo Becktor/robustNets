@@ -38,7 +38,7 @@ def main(args=None):
         "milestones": [10, 75, 100],
         "gamma": 0.1,
         "pre_trained": parser.pre_trained,
-        "train_set": parser.csv_train 
+        "train_set": parser.csv_train
     })
     config = wandb.config
 
@@ -99,11 +99,11 @@ def main(args=None):
     """
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
-    count_parameters(model)
+    #count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
-                                          gamma=config.gamma)
+                                               gamma=config.gamma)
     n_iters = len(dataset_train) / parser.batch_size
     # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-4,
     #                                        step_size_up=n_iters, cycle_momentum=False)
@@ -155,7 +155,7 @@ def main(args=None):
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
 
-            if curr_epoch >= config.reweight:
+            if curr_epoch >= 0:
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
@@ -213,13 +213,15 @@ def main(args=None):
 
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
+            runtime = (time.time() - t0) / (1 + iter_num)
+            scheduler.step()
             if iter_num % 2 == 0:
                 lr = get_lr(optimizer)
                 print(
                     'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
-                    'rl: {:1.5f} | SI : {} LR: {}'.format(iter_num, float(classification_loss),
-                                                          float(regression_loss), np.mean(loss_hist), skipped_iters,
-                                                          float(lr)), end='\r')
+                    'rl: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
+                                                                  float(regression_loss), np.mean(loss_hist), float(lr),
+                                                                  runtime), end='\r')
 
             del classification_loss
             del regression_loss
@@ -232,44 +234,44 @@ def main(args=None):
 
             _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)
 
-        # Write to Tensorboard
-        wandb.log({"train/Epoch_runtime": runtime})
-        wandb.log({"train/running_loss": np.mean(loss_hist)})
+            # Write to Tensorboard
+            wandb.log({"train/Epoch_runtime": runtime})
+            wandb.log({"train/running_loss": np.mean(loss_hist)})
 
-        wandb.log({"val/Buoy_Recall": rl[0][1]})
-        wandb.log({"val/Buoy_Precision": rl[0][2]})
+            wandb.log({"val/Buoy_Recall": rl[0][1]})
+            wandb.log({"val/Buoy_Precision": rl[0][2]})
 
-        wandb.log({"val/Boat_Recall": rl[1][1]})
-        wandb.log({"val/Boat_Precision": rl[1][2]})
+            wandb.log({"val/Boat_Recall": rl[1][1]})
+            wandb.log({"val/Boat_Precision": rl[1][2]})
 
-        wandb.log({"mAP/AP_Buoy": rl[2][1]})
-        wandb.log({"mAP/AP_Boat": rl[3][1]})
-        wandb.log({"mAP/mAP": rl[4]})
+            wandb.log({"mAP/AP_Buoy": rl[2][1]})
+            wandb.log({"mAP/AP_Boat": rl[3][1]})
+            wandb.log({"mAP/mAP": rl[4]})
 
-        wandb.log({"lr/Learning Rate": lr})
+            wandb.log({"lr/Learning Rate": lr})
 
-        checkpoint = {
-            'epoch': curr_epoch + 1,
-            'state_dict': model.state_dict(),
-            'optimizer': optimizer.state_dict(),
-            'scheduler': scheduler.state_dict(),
-            'buoy_AP': rl[2][1],
-            'boat_AP': rl[3][1],
-            'mAP': rl[4]
-        }
+            checkpoint = {
+                'epoch': curr_epoch + 1,
+                'state_dict': model.state_dict(),
+                'optimizer': optimizer.state_dict(),
+                'scheduler': scheduler.state_dict(),
+                'buoy_AP': rl[2][1],
+                'boat_AP': rl[3][1],
+                'mAP': rl[4]
+            }
 
-        if rl[4] > mAP:
-            mAP = rl[4]
-            save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)
-        else:
-            save_ckp(checkpoint, model, False, checkpoint_dir, curr_epoch)
+            if rl[4] > mAP:
+                mAP = rl[4]
+                save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)
+            else:
+                save_ckp(checkpoint, model, False, checkpoint_dir, curr_epoch)
 
-        loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
-        loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
-                                                                      rl[0], rl[1], rl[2], rl[3],
-                                                                      rl[2][1], rl[3][1], rl[4]))
-        loss_file.close()
-
+            loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
+            loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
+                                                                          rl[0], rl[1], rl[2], rl[3],
+                                                                          rl[2][1], rl[3][1], rl[4]))
+            loss_file.close()
+        break
     model.eval()
     torch.save(model, 'model_final.pt')
 
