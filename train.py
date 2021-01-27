@@ -17,6 +17,7 @@ assert torch.__version__.split('.')[0] == '1'
 
 
 def main(args=None):
+    print(torch.__version__)
     parser = argparse.ArgumentParser(description='Simple training script for training a RetinaNet network.')
     parser.add_argument('--csv_train', help='Path to file containing training annotations (see readme)')
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
@@ -34,7 +35,7 @@ def main(args=None):
     wandb.init(project="reweight", config={
         "learning_rate": 1e-4,
         "ResNet": parser.depth,
-        "reweight": 1,
+        "reweight": 15,
         "milestones": [10, 75, 100],
         "gamma": 0.1,
         "pre_trained": parser.pre_trained,
@@ -64,15 +65,15 @@ def main(args=None):
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater,
-                                  batch_sampler=sampler)
+                                  batch_sampler=sampler, pin_memory=True)
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater_for_validation,
-                                    batch_sampler=sampler_val)
+                                    batch_sampler=sampler_val, pin_memory=True)
 
     dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
-                                   shuffle=True)
+                                   shuffle=True, pin_memory=True)
 
     pre_trained = False
     if parser.pre_trained:
@@ -100,7 +101,7 @@ def main(args=None):
     """
     checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
 
-    #count_parameters(model)
+    count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
     scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
@@ -131,9 +132,9 @@ def main(args=None):
 
     print('Num training images: {} and num itr: {}'.format(len(dataset_train), n_iters))
 
-    zero_tensor = torch.tensor(0.).cuda()
+    zero_tensor = torch.tensor(0., device=torch.device('cuda'))
     mAP = 0
-
+    torch.backends.cudnn.benchmark = True
     for epoch_num in range(parser.epochs):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
@@ -162,15 +163,14 @@ def main(args=None):
                 # Setup meta net
                 meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
                 meta_model.load_state_dict(model.state_dict())
-                if torch.cuda.is_available():
-                    meta_model.cuda()
+                meta_model.cuda()
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
 
                 meta_classification_loss, meta_regression_loss, meta_cl = meta_model([image, labels])
                 meta_joined_cost = meta_cl[0] + meta_cl[1]
                 eps = to_var(torch.zeros(meta_cl[0].size()))
                 l_f_meta = torch.sum(meta_joined_cost * eps)
-                meta_model.zero_grad()
+                meta_model.zero_grad(set_to_none=True)
 
                 # Line 6 perform a parameter update
                 grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
@@ -207,7 +207,7 @@ def main(args=None):
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
