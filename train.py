@@ -34,11 +34,12 @@ def main(args=None):
     wandb.init(project="reweight", config={
         "learning_rate": 1e-4,
         "ResNet": parser.depth,
-        "reweight": 525,
+        "reweight": 1,
         "milestones": [10, 75, 100],
         "gamma": 0.1,
         "pre_trained": parser.pre_trained,
-        "train_set": parser.csv_train
+        "train_set": parser.csv_train,
+        "batch_size": parser.batch_size
     })
     config = wandb.config
 
@@ -155,7 +156,7 @@ def main(args=None):
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
 
-            if curr_epoch >= 0:
+            if curr_epoch >= config.reweight:
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net

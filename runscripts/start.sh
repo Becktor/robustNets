@@ -29,4 +29,4 @@
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/21k_annot95_auto5_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc.csv --batch_size=64
+python train.py --csv_train /work1/jbibe/21k_annot95_auto5_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc.csv --batch_size=16
