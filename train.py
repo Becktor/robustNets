@@ -31,19 +31,22 @@ def main(args=None):
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
 
     parser = parser.parse_args(args)
-    # torch.backends.cudnn.benchmark = True
-    wandb.init(project="reweight", config={
-        "learning_rate": 1e-4,
-        "ResNet": parser.depth,
-        "reweight": 515,
-        "milestones": [10, 75, 100],
-        "gamma": 0.1,
-        "pre_trained": parser.pre_trained,
-        "train_set": parser.csv_train,
-        "batch_size": parser.batch_size
-    })
+    if parser.continue_training is not None:
+        id = parser.continue_training[:-8]
+        wandb.init(project="reweight", id=id, resume=True)
+    else:
+        wandb.init(project="reweight", config={
+            "learning_rate": 1e-4,
+            "ResNet": parser.depth,
+            "reweight": 15,
+            "milestones": [10, 75, 100],
+            "gamma": 0.1,
+            "pre_trained": parser.pre_trained,
+            "train_set": parser.csv_train,
+            "batch_size": parser.batch_size
+        })
     config = wandb.config
-
+    wandb_name = wandb.run.name + "_" + wandb.run.id
     """
     Data loaders
     """
@@ -99,7 +102,7 @@ def main(args=None):
     """
        Optimizer
     """
-    checkpoint_dir = os.path.join('trained_models', 'model') + dt.datetime.now().strftime("%j_%H%M")
+    checkpoint_dir = os.path.join('trained_models', wandb_name)
 
     count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
@@ -114,9 +117,8 @@ def main(args=None):
     if parser.continue_training is None:
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
-
     else:
-        model, optimizer, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer)
+        model, optimizer, scheduler, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer, scheduler)
         checkpoint_dir = parser.continue_training
         prev_epoch = checkpoint_dict['epoch']
 

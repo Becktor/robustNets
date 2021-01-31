@@ -57,7 +57,7 @@ def main(fn):
             else:
                 yolo = "{} {:06f} {:06f} {:06f} {:06f}\n".format(l, x, y, h, w)
             print("name: {} -- content {}".format(name, tmp))
-            pn = '2019_04_12_yolo'
+            pn = 'aalbarg_yolo'
             if not os.path.exists(pn):
                 os.makedirs(pn)
             n = os.path.join(pn, name + '.txt')
@@ -69,5 +69,5 @@ def main(fn):
 if __name__ == '__main__':
     #fn = r'Z:\Shippinglab\mmdet\rgb_train.csv'
     #fn2 = r'Z:\Shippinglab\mmdet\weight_set.csv'
-    fn = r'Z:\Shippinglab\mmdet\2019_04_12.csv'
+    fn = r'C:\Users\Jobe\Documents\git\jobe.csv'
     main(fn)

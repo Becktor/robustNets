@@ -21,14 +21,15 @@ def save_ckp(state, model, is_best, checkpoint_dir, epoch):
         torch.save(state, best_filepath)
 
 
-def load_ckp(checkpoint_filepath, model, optimizer=None):
+def load_ckp(checkpoint_filepath, model, optimizer=None, scheduler=None):
     cwd = os.path.join(os.getcwd(), checkpoint_filepath)
     path = os.path.join(cwd, 'checkpoint.pt')
     checkpoint = torch.load(path)
-    model.load_state_dict(checkpoint['state_dict'],strict=False)
+    model.load_state_dict(checkpoint['state_dict'], strict=False)
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer'])
-    return model, optimizer, checkpoint
+        scheduler.load_state_dict(checkpoint['scheduler'])
+    return model, optimizer, scheduler, checkpoint
 
 
 def load_best_ckp(checkpoint_filepath, model, optimizer):
