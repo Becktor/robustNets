@@ -1,9 +1,9 @@
 #!/bin/sh
 ### General options
 ### -- specify queue --
-#BSUB -q gpuv100
+#BSUB -q gpua100
 ### -- set the job Name --
-#BSUB -J reweight
+#BSUB -J rw
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 2
 ### -- Select the resources: 1 gpu in exclusive process mode --
@@ -11,7 +11,7 @@
 ### -- set walltime limit: hh:mm -- maximum 24 hours for GPU-queues right now
 #BSUB -W 24:00
 # request 5GB of system-memory
-#BSUB -R "rusage[mem=32GB]"
+#BSUB -R "rusage[mem=40GB]"
 ### -- set the email address --
 # please uncomment the following line and put in your e-mail address,
 # if you want to receive e-mail notifications on a non-default address
@@ -27,6 +27,6 @@
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
-module load cudnn/v7.6.5.32-prod-cuda-10.0
+module load cudnn/v8.0.5.39-prod-cuda-11.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/21k_annot95_auto5_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc.csv --batch_size=16 --continue_training /work1/jbibe/git/robustNets/trained_models/model029_1358
+python train.py --csv_train /work1/jbibe/21k_annot95_auto5_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc.csv --batch_size=16

@@ -35,7 +35,7 @@ def main(args=None):
     wandb.init(project="reweight", config={
         "learning_rate": 1e-4,
         "ResNet": parser.depth,
-        "reweight": 15,
+        "reweight": 515,
         "milestones": [10, 75, 100],
         "gamma": 0.1,
         "pre_trained": parser.pre_trained,
@@ -104,11 +104,11 @@ def main(args=None):
     count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
-    scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
-                                               gamma=config.gamma)
+    #scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
+    #                                           gamma=config.gamma)
     n_iters = len(dataset_train) / parser.batch_size
-    # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-4,
-    #                                        step_size_up=n_iters, cycle_momentum=False)
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
+                                            step_size_up=n_iters, cycle_momentum=False)
 
     prev_epoch = 0
     if parser.continue_training is None:
@@ -211,11 +211,10 @@ def main(args=None):
             loss.backward()
             optimizer.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-
+            scheduler.step()
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
             runtime = (time.time() - t0) / (1 + iter_num)
-            scheduler.step()
             if iter_num % 2 == 0:
                 lr = get_lr(optimizer)
                 print(
@@ -226,9 +225,7 @@ def main(args=None):
 
             del classification_loss
             del regression_loss
-        scheduler.step()
         runtime = time.time() - t0
-        scheduler.step()
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
         if parser.csv_val is not None:
             print('Evaluating dataset')
@@ -272,7 +269,6 @@ def main(args=None):
                                                                           rl[0], rl[1], rl[2], rl[3],
                                                                           rl[2][1], rl[3][1], rl[4]))
             loss_file.close()
-        break
     model.eval()
     torch.save(model, 'model_final.pt')
 

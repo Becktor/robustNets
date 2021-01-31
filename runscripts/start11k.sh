@@ -1,7 +1,7 @@
 #!/bin/sh
 ### General options
 ### -- specify queue --
-#BSUB -q gpua100
+#BSUB -q gpuv100
 ### -- set the job Name --
 #BSUB -J rw_11k
 ### -- ask for number of cores (default: 1) --
@@ -22,8 +22,8 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o reweight_11k_%J.out
-#BSUB -e reweight_11k_%J.err
+#BSUB -o reweight_%J.out
+#BSUB -e reweight_%J.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7

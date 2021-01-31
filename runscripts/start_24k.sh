@@ -3,7 +3,7 @@
 ### -- specify queue --
 #BSUB -q gpuv100
 ### -- set the job Name --
-#BSUB -J reweight
+#BSUB -J rw24k 
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 2
 ### -- Select the resources: 1 gpu in exclusive process mode --
@@ -22,11 +22,11 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o reweight_%J.out
-#BSUB -e reweight_%J.err
+#BSUB -o rw_%J.out
+#BSUB -e rw_%J.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/21k_annot95_auto5_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc.csv --batch_size=16 --continue_training /work1/jbibe/git/robustNets/trained_models/model029_1358
+python train.py --csv_train /work1/jbibe/24k_annot90_auto10_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/mmdet/fix_annotations_rgb_val.csv --csv_weight /work1/jbibe/weightset_hpc2.csv --batch_size=16
