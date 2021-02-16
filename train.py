@@ -7,12 +7,12 @@ from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, \
-    crop_collater_for_validation
+    crop_collater_for_validation, LabelFlip
 from torch.utils.data import DataLoader
 from utils import *
 import wandb
 import time
-
+import copy
 assert torch.__version__.split('.')[0] == '1'
 
 
@@ -29,6 +29,7 @@ def main(args=None):
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
+    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
 
     parser = parser.parse_args(args)
     if parser.continue_training is not None:
@@ -38,20 +39,25 @@ def main(args=None):
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 15,
+            "reweight": 0,
             "milestones": [10, 75, 100],
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
-            "batch_size": parser.batch_size
+            "batch_size": parser.batch_size,
+            "label_flip": parser.label_flip
         })
     config = wandb.config
     wandb_name = wandb.run.name + "_" + wandb.run.id
     """
     Data loaders
     """
+    if parser.label_flip:
+        trans = [LabelFlip(), Crop(), Augmenter(), Resizer()]
+    else:
+        trans = [Crop(), Augmenter(), Resizer()]
     dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
-                               transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
+                               transform=transforms.Compose(trans))
 
     if parser.csv_val is None:
         dataset_val = None
@@ -68,15 +74,15 @@ def main(args=None):
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater,
-                                  batch_sampler=sampler, pin_memory=True)
+                                  batch_sampler=sampler)
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
         dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater_for_validation,
-                                    batch_sampler=sampler_val, pin_memory=True)
+                                    batch_sampler=sampler_val)
 
     dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
-                                   shuffle=True, pin_memory=True)
+                                   shuffle=True)
 
     pre_trained = False
     if parser.pre_trained:
@@ -95,10 +101,7 @@ def main(args=None):
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
 
-    use_gpu = True
-    if use_gpu:
-        model = model.cuda()
-    model = model.cuda()
+
     """
        Optimizer
     """
@@ -136,6 +139,10 @@ def main(args=None):
 
     zero_tensor = torch.tensor(0., device=torch.device('cuda'))
     mAP = 0
+    use_gpu = True
+    if use_gpu:
+        model = model.cuda()
+    model = model.cuda()
     torch.backends.cudnn.benchmark = True
     for epoch_num in range(parser.epochs):
         t0 = time.time()
@@ -158,28 +165,31 @@ def main(args=None):
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
-
+            if loss == zero_tensor:
+                zero_loss += 1
+                continue
             if curr_epoch >= config.reweight:
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
-                meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
-                meta_model.load_state_dict(model.state_dict())
+                meta_model = copy.deepcopy(model)
                 meta_model.cuda()
+
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
 
                 meta_classification_loss, meta_regression_loss, meta_cl = meta_model([image, labels])
                 meta_joined_cost = meta_cl[0] + meta_cl[1]
-                eps = to_var(torch.zeros(meta_cl[0].size()))
+                # Get loss and apply epsilon.
+                eps = to_var(torch.zeros(parser.batch_size))
                 l_f_meta = torch.sum(meta_joined_cost * eps)
                 meta_model.zero_grad(set_to_none=True)
 
-                # Line 6 perform a parameter update
+                # Get original gradients with epsilon applied.
                 grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
                 if any(x is None for x in grads):
                     skipped_iters += 1
                     continue
-
+                # Perform a parameter update
                 meta_model.update_params(lr, source_params=grads)
 
                 for weighted_data in dataloader_weight:
@@ -224,7 +234,6 @@ def main(args=None):
                     'rl: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
                                                                   float(regression_loss), np.mean(loss_hist), float(lr),
                                                                   runtime), end='\r')
-
             del classification_loss
             del regression_loss
         runtime = time.time() - t0
