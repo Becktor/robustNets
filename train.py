@@ -23,7 +23,7 @@ def main(args=None):
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
-    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
+    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=10)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
@@ -32,13 +32,14 @@ def main(args=None):
 
     parser = parser.parse_args(args)
     if parser.continue_training is not None:
-        id = parser.continue_training[:-8]
-        wandb.init(project="reweight", id=id, resume=True)
+        wid = parser.continue_training[-8:]
+        print(wid)
+        wandb.init(project="reweight", id=wid, resume=True)
     else:
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 15,
+            "reweight": 515,
             "milestones": [10, 75, 100],
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
@@ -83,7 +84,7 @@ def main(args=None):
         pre_trained = True
     # Create the model
     if parser.depth == 18:
-        model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.rresnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
@@ -158,12 +159,15 @@ def main(args=None):
             classification_loss, regression_loss, _ = model([image, labels])
             cost = classification_loss + regression_loss
             loss = torch.sum(cost)
+            if loss == zero_tensor:
+                zero_loss +=1
+                continue
 
             if curr_epoch >= config.reweight:
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
-                meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
+                meta_model = retinanet.resnet50(num_classes=dataset_train.num_classes())
                 meta_model.load_state_dict(model.state_dict())
                 meta_model.cuda()
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
