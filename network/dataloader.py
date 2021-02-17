@@ -561,12 +561,13 @@ class LabelFlip(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample, flip_x=0.5):
-        image, annots, name = sample['img'], sample['annot'], sample['name']
-        f_annots = annots.copy()
-        for x in range(len(f_annots)):
-            if np.random.rand() < flip_x:
-                f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
-        sample = {'img': image, 'annot': f_annots, 'name': name}
+        if np.random.rand() < flip_x:
+            image, annots, name = sample['img'], sample['annot'], sample['name']
+            f_annots = annots.copy()
+            for x in range(len(f_annots)):
+                if np.random.rand() < flip_x:
+                    f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
+            sample = {'img': image, 'annot': f_annots, 'name': name}
 
         return sample
 

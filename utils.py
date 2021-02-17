@@ -3,6 +3,9 @@ import re
 import torch
 from torch.autograd import Variable
 from prettytable import PrettyTable
+import matplotlib.pyplot as plt
+import cv2
+import numpy as np
 
 
 def atoi(text):
@@ -63,3 +66,22 @@ def count_parameters(model):
     print(table)
     print(f"Total Trainable Params: {total_params}")
     return total_params
+
+
+def plot_input(data, title="input"):
+    images = data['img'].cpu().numpy()
+    labels = data['annot'].cpu().numpy()
+    for i in range(len(images)):
+        img = images[i].transpose([1, 2, 0])
+        val = labels[i]
+        img2 = img.copy()
+        for v in val:
+            color = (0, 1, 0)
+            if v[4] == 0:
+                color = (0, 0, 1)
+
+            img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
+                                 (int(v[2]), int(v[3])), color=color, thickness=2)
+        plt.imshow(img2)
+        plt.title(title+"-> Bouy is blue, boat is green")
+        plt.show()
