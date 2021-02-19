@@ -71,6 +71,7 @@ def count_parameters(model):
 def plot_input(data, title="input"):
     images = data['img'].cpu().numpy()
     labels = data['annot'].cpu().numpy()
+    names = data['names']
     for i in range(len(images)):
         img = images[i].transpose([1, 2, 0])
         val = labels[i]

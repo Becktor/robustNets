@@ -14,7 +14,8 @@ import wandb
 import time
 import copy
 assert torch.__version__.split('.')[0] == '1'
-
+# if 'PYCHARM' in os.environ:
+#     os.environ["WANDB_MODE"] = "dryrun"
 
 def main(args=None):
     print(torch.__version__)
@@ -23,35 +24,33 @@ def main(args=None):
     parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
-    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=50)
+    parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=10)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=64)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
     parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
-    parser.add_argument('--debug', help='ResNet base pre-trained or not', type=bool, default=False)
 
     parser = parser.parse_args(args)
-    debug=parser.debug
-    if not debug:
-        if parser.continue_training is not None:
-            id = parser.continue_training[:-8]
-            wandb.init(project="reweight", id=id, resume=True)
-        else:
-            wandb.init(project="reweight", config={
-                "learning_rate": 1e-4,
-                "ResNet": parser.depth,
-                "reweight": 0,
-                "milestones": [10, 75, 100],
-                "gamma": 0.1,
-                "pre_trained": parser.pre_trained,
-                "train_set": parser.csv_train,
-                "batch_size": parser.batch_size,
-                "label_flip": parser.label_flip
-            })
-        config = wandb.config
-        wandb_name = wandb.run.name + "_" + wandb.run.id
+
+    if parser.continue_training is not None:
+        id = parser.continue_training[-8:]
+        wandb.init(project="reweight", id=id, resume=True)
+    else:
+        wandb.init(project="reweight", config={
+            "learning_rate": 1e-4,
+            "ResNet": parser.depth,
+            "reweight": 0,
+            "milestones": [10, 75, 100],
+            "gamma": 0.1,
+            "pre_trained": parser.pre_trained,
+            "train_set": parser.csv_train,
+            "batch_size": parser.batch_size,
+            "label_flip": parser.label_flip
+        })
+    config = wandb.config
+    wandb_name = wandb.run.name + "_" + wandb.run.id
     """
     Data loaders
     """
@@ -116,7 +115,7 @@ def main(args=None):
     #scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
     #                                           gamma=config.gamma)
     n_iters = len(dataset_train) / parser.batch_size
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-4,
                                             step_size_up=n_iters, cycle_momentum=False)
 
     prev_epoch = 0
@@ -164,12 +163,10 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
-            if debug:
-                plot_input(data)
             # names = data['name']
-            classification_loss, regression_loss, _ = model([image, labels])
-            cost = classification_loss + regression_loss
-            loss = torch.sum(cost)
+            classification_loss, regression_loss, cl = model([image, labels])
+            cost = cl[0] + cl[1]
+            loss = torch.mean(cost)
             if loss == zero_tensor:
                 zero_loss +=1
                 continue
@@ -202,8 +199,6 @@ def main(args=None):
                     v_image = to_var(weighted_data['img'], requires_grad=False)
                     v_labels = to_var(weighted_data['annot'], requires_grad=False)
                     names = weighted_data['name']
-                    if debug:
-                        plot_input(weighted_data,'weight')
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
                     grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0]
@@ -244,7 +239,7 @@ def main(args=None):
             del regression_loss
         runtime = time.time() - t0
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
-        if parser.csv_val is not None:
+        if parser.csv_val is not None and epoch_num % 2 == 0:
             print('Evaluating dataset')
 
             _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)

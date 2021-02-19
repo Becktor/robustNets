@@ -563,10 +563,13 @@ class LabelFlip(object):
     def __call__(self, sample, flip_x=0.5):
         if np.random.rand() < flip_x:
             image, annots, name = sample['img'], sample['annot'], sample['name']
-            f_annots = annots.copy()
-            for x in range(len(f_annots)):
+            f_annots = np.ones_like(annots) * -1
+            for x in range(len(annots)):
                 if np.random.rand() < flip_x:
+                    f_annots[x] = annots[x]
                     f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
+                else:
+                    continue
             sample = {'img': image, 'annot': f_annots, 'name': name}
 
         return sample
