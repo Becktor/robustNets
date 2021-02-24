@@ -302,6 +302,10 @@ def crop_collater_for_validation(data):
                     anno = np.array([n_x1, n_y1, n_x2, n_y2, lbl])
                     if (key == 0) or (key == 1):
                         anno[:4] *= scale
+                    area = (anno[2] - anno[0]) * (anno[3] - anno[1])
+                    if area <= 16:
+                        continue
+
                     sample_crops.setdefault(key, []).append(anno)
         sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
         sm2 = skimage.transform.resize(sm2, (int(height), int(round(width))))
@@ -466,7 +470,8 @@ class Crop(object):
                     n_y1 = y1 - sp[1]
                     n_x2 = n_x1 + sp[2] if x2 > sp[0] + sp[2] else x2 - sp[0]
                     n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
-
+                    if (n_x2-n_x1)*(n_y2-n_y1) < 16:
+                        debug = True
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
                     sample_crops.setdefault(key, []).append(anno)
 
@@ -489,7 +494,8 @@ class Crop(object):
                 val = np.array(sample_crops[key])
                 img2 = img
                 for v in val:
-                    img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
+                    if (int(v[2])-int(v[0]))*(int(v[3])-int(v[1])) < 16:
+                        img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
                                          (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
                 plt.imshow(img2)
                 plt.show()
@@ -530,8 +536,14 @@ class Resizer(object):
         new_image[:rows, :cols, :] = image.astype(np.float32)
 
         annots[:, :4] *= scale
+        resized_annots = np.ones_like(annots)*-1
+        for x in range(len(annots)):
+            area = (annots[x, 2] - annots[x, 0]) * (annots[x, 3] - annots[x, 1])
+            if area > 16:
+                resized_annots[x] = annots[x]
 
-        return {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale, 'name': name}
+        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(resized_annots), 'scale': scale, 'name': name}
+        return sample
 
 
 class Augmenter(object):

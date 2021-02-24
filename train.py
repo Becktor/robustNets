@@ -26,11 +26,11 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=64)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=128)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
-    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
+    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=False)
 
     parser = parser.parse_args(args)
 
@@ -41,7 +41,7 @@ def main(args=None):
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 0,
+            "reweight": 500,
             "milestones": [10, 75, 100],
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
@@ -112,10 +112,9 @@ def main(args=None):
     count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
-    #scheduler = optim.lr_scheduler.MultiStepLR(optimizer, milestones=config.milestones,
-    #                                           gamma=config.gamma)
+
     n_iters = len(dataset_train) / parser.batch_size
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-4,
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-6, max_lr=1e-4,
                                             step_size_up=n_iters, cycle_momentum=False)
 
     prev_epoch = 0
@@ -129,7 +128,7 @@ def main(args=None):
 
         # mAP = checkpoint_dict['mAP']
     wandb.watch(model)
-    scheduler.last_epoch = prev_epoch
+    #scheduler.last_epoch = prev_epoch
     loss_hist = collections.deque(maxlen=500)
 
     model.training = True
@@ -168,7 +167,7 @@ def main(args=None):
             cost = cl[0] + cl[1]
             loss = torch.mean(cost)
             if loss == zero_tensor:
-                zero_loss +=1
+                zero_loss += 1
                 continue
             if curr_epoch >= config.reweight:
                 # Line 2 get batch of data
@@ -201,7 +200,8 @@ def main(args=None):
                     names = weighted_data['name']
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
-                    grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0]
+
+                    grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0] #find gradients with regard to epsilon
 
                     # Line 11 computing and normalizing the weights
                     w_tilde = torch.clamp(-grad_eps.detach(), min=0)
@@ -239,7 +239,7 @@ def main(args=None):
             del regression_loss
         runtime = time.time() - t0
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
-        if parser.csv_val is not None and epoch_num % 2 == 0:
+        if parser.csv_val is not None:
             print('Evaluating dataset')
 
             _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)
