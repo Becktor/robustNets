@@ -33,7 +33,7 @@ class FocalLoss(nn.Module):
         batch_size = classifications.shape[0]
         classification_losses = []
         regression_losses = []
-
+        iou_thresh = .3
         anchor = anchors[0, :, :]
         anchor_widths = anchor[:, 2] - anchor[:, 0]
         anchor_heights = anchor[:, 3] - anchor[:, 1]
@@ -63,9 +63,9 @@ class FocalLoss(nn.Module):
             targets = torch.ones(classification.shape) * -1
             targets = targets.cuda()
 
-            targets[torch.lt(IoU_max, 0.4), :] = 0
+            targets[torch.lt(IoU_max, iou_thresh), :] = 0
 
-            positive_indices = torch.ge(IoU_max, 0.5)
+            positive_indices = torch.ge(IoU_max, iou_thresh)
             num_positive_anchors = positive_indices.sum()
 
             assigned_annotations = bbox_annotation[IoU_argmax, :]
@@ -141,10 +141,12 @@ class RCNNLoss(nn.Module):
         super().__init__()
 
     def forward(self, classifications, regressions, anchors, annotations):
+        alpha = 0.25
+        gamma = 2.0
         batch_size = classifications.shape[0]
         classification_losses = []
         regression_losses = []
-        iou_thresh = .5
+        iou_thresh = .3
         anchor = anchors[0, :, :]
         anchor_widths = anchor[:, 2] - anchor[:, 0]
         anchor_heights = anchor[:, 3] - anchor[:, 1]
@@ -172,8 +174,9 @@ class RCNNLoss(nn.Module):
             targets = torch.ones(classification.shape) * -1
             targets = targets.cuda()
 
-            targets[torch.lt(IoU_max, iou_thresh-0.1), :] = 0
-
+            tmp = iou_thresh - 0.1
+            targets[torch.lt(IoU_max, tmp), :] = 0
+            classification[torch.lt(IoU_max, tmp), :] /= torch.lt(IoU_max, tmp).sum()/2
             positive_indices = torch.ge(IoU_max, iou_thresh)
             num_positive_anchors = positive_indices.sum()
 
@@ -184,12 +187,11 @@ class RCNNLoss(nn.Module):
 
             bce = -(targets * torch.log(classification) + (1.0 - targets) * torch.log(1.0 - classification))
 
-            # cls_loss = focal_weight * torch.pow(bce, gamma)
-            cls_loss = bce
+            cls_loss = torch.where(torch.ne(targets, -1.0), bce, torch.zeros(bce.shape).cuda())
 
-            cls_loss = torch.where(torch.ne(targets, -1.0), cls_loss, torch.zeros(cls_loss.shape).cuda())
+            cls = num_positive_anchors.float()
 
-            classification_losses.append(cls_loss.sum() / torch.clamp(num_positive_anchors.float(), min=1.0))
+            classification_losses.append(cls_loss.sum() / torch.clamp(cls, min=1.0))
 
             # compute the loss for regression
 
