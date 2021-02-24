@@ -117,7 +117,6 @@ def main(args=None):
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
 
-
     n_iters = len(dataset_train) / parser.batch_size
     scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-6, max_lr=1e-4,
                                             step_size_up=n_iters, cycle_momentum=False)
@@ -207,7 +206,6 @@ def main(args=None):
                     names = weighted_data['name']
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
-
 
                     grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[0] #find gradients with regard to epsilon
 
