@@ -179,8 +179,8 @@ class ResNet(MetaModule):
 
         self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2])
 
-        self.regressionModel = RegressionModel(256, num_anchors=15)
-        self.classificationModel = ClassificationModel(256, num_classes=num_classes, num_anchors=15)
+        self.regressionModel = RegressionModel(256)
+        self.classificationModel = ClassificationModel(256, num_classes=num_classes)
 
         self.anchors = Anchors()
 
@@ -313,8 +313,8 @@ class ResNetReduced(MetaModule):
 
         self.fpn = PyramidFeatures(fpn_sizes[0], fpn_sizes[1], fpn_sizes[2], feature_size=32)
 
-        self.regressionModel = RegressionModel(32, num_anchors=15, feature_size=32)
-        self.classificationModel = ClassificationModel(32, num_classes=num_classes, num_anchors=15, feature_size=32)
+        self.regressionModel = RegressionModel(32, num_anchors=9, feature_size=32)
+        self.classificationModel = ClassificationModel(32, num_classes=num_classes, num_anchors=9, feature_size=32)
 
         self.anchors = Anchors()
 
@@ -322,7 +322,7 @@ class ResNetReduced(MetaModule):
 
         self.clipBoxes = ClipBoxes()
 
-        self.focalLoss = losses.FocalLoss()
+        self.loss = losses.RCNNLoss()
 
         for m in self.modules():
             if isinstance(m, conv):
@@ -399,7 +399,7 @@ class ResNetReduced(MetaModule):
         anchors = self.anchors(img_batch)
 
         if self.training:
-            return self.focalLoss(classification, regression, anchors, annotations)
+            return self.loss(classification, regression, anchors, annotations)
         else:
             transformed_anchors = self.regressBoxes(anchors, regression)
             transformed_anchors = self.clipBoxes(transformed_anchors, img_batch)

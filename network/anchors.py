@@ -15,9 +15,9 @@ class Anchors(nn.Module):
             self.sizes = [2 ** x for x in self.pyramid_levels]
             #self.sizes = [14, 21, 34, 60, 132]
         if ratios is None:
-            self.ratios = np.array([0.76, 1.14, 1.57, 2.18, 3.2],)
+            self.ratios = np.array([0.5, 1, 2],)
         if scales is None:
-            self.scales = np.array([0.75, 1, 1.75])
+            self.scales = np.array([0.5, 1, 2])
 
     def forward(self, image):
 
