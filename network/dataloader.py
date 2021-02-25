@@ -470,8 +470,7 @@ class Crop(object):
                     n_y1 = y1 - sp[1]
                     n_x2 = n_x1 + sp[2] if x2 > sp[0] + sp[2] else x2 - sp[0]
                     n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
-                    if (n_x2-n_x1)*(n_y2-n_y1) < 16:
-                        debug = True
+
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
                     sample_crops.setdefault(key, []).append(anno)
 
