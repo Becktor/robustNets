@@ -7,7 +7,7 @@ from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, CropSampler, \
-    crop_collater_for_validation
+    crop_collater_for_validation, LabelFlip
 from torch.utils.data import DataLoader
 from utils import *
 import wandb
@@ -45,7 +45,7 @@ def main(args=None):
     Data loaders
     """
     dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
-                               transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
+                               transform=transforms.Compose([LabelFlip(), Crop(), Augmenter(), Resizer()]))
 
     if parser.csv_val is None:
         dataset_val = None
