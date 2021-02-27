@@ -7,7 +7,7 @@ from torchvision import transforms
 from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, \
-    crop_collater_for_validation, LabelFlip
+    crop_collater, LabelFlip
 from torch.utils.data import DataLoader
 from utils import *
 import wandb
@@ -17,8 +17,8 @@ import copy
 assert torch.__version__.split('.')[0] == '1'
 
 
-# if 'PYCHARM' in os.environ:
-#     os.environ["WANDB_MODE"] = "dryrun"
+#if 'PYCHARM' in os.environ:
+#    os.environ["WANDB_MODE"] = "dryrun"
 
 def main(args=None):
     print(torch.__version__)
@@ -29,7 +29,7 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=10)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=64)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -75,7 +75,7 @@ def main(args=None):
         print('No validation annotations provided.')
     else:
         dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=True,
-                                    transform=transforms.Compose([Crop(), Augmenter(), Resizer()]))
+                                    transform=transforms.Compose([Augmenter()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater,
@@ -83,11 +83,11 @@ def main(args=None):
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
-        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater_for_validation,
+        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater,
                                     batch_sampler=sampler_val)
-
-    dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
-                                   shuffle=True)
+    sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size//4, drop_last=True)
+    dataloader_weight = DataLoader(dataset_weight, num_workers=3,
+                                   collate_fn=crop_collater, batch_sampler=sampler_weight)
 
     pre_trained = False
     if parser.pre_trained:
@@ -154,6 +154,7 @@ def main(args=None):
         model.train()
         model.freeze_bn()
         epoch_loss = []
+        m_epoch_loss = []
         print('============= Starting Epoch {} ============\n'.format(curr_epoch))
         skipped_iters = 0
         zero_loss = 0
@@ -181,7 +182,7 @@ def main(args=None):
 
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
 
-                meta_classification_loss, meta_regression_loss, meta_cl = meta_model([image, labels])
+                _, _, meta_cl = meta_model([image, labels])
                 meta_joined_cost = meta_cl[0] + meta_cl[1]
                 # Get loss and apply epsilon.
                 eps = to_var(torch.zeros(parser.batch_size))
@@ -203,9 +204,11 @@ def main(args=None):
                     names = weighted_data['name']
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
-
-                    grad_eps = torch.autograd.grad(l_g_meta.mean(), eps, only_inputs=True)[
-                        0]  # find gradients with regard to epsilon
+                    m_epoch_loss.append(float(l_g_meta))
+                    if l_g_meta == zero_tensor:
+                        zero_loss += 1
+                        continue
+                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]  # find gradients with regard to epsilon
 
                     # Line 11 computing and normalizing the weights
                     w_tilde = torch.clamp(-grad_eps.detach(), min=0)
@@ -236,8 +239,8 @@ def main(args=None):
                 lr = get_lr(optimizer)
                 print(
                     'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
-                    'rl: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
-                                                                  float(regression_loss), np.mean(loss_hist), float(lr),
+                    'mel: {:1.5f} el: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
+                                                                  float(regression_loss), np.mean(m_epoch_loss), np.mean(epoch_loss), float(lr),
                                                                   runtime), end='\r')
             del classification_loss
             del regression_loss
@@ -251,6 +254,8 @@ def main(args=None):
             # Write to Tensorboard
             wandb.log({"train/Epoch_runtime": runtime})
             wandb.log({"train/running_loss": np.mean(loss_hist)})
+            wandb.log({"train/epoch_loss": np.mean(epoch_loss)})
+            wandb.log({"train/meta_epoch_loss": np.mean(m_epoch_loss)})
 
             wandb.log({"val/Buoy_Recall": rl[0][1]})
             wandb.log({"val/Buoy_Precision": rl[0][2]})

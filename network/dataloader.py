@@ -108,7 +108,7 @@ class CSVDataset(Dataset):
         name = self.image_names[idx]
         annot = self.load_annotations(idx, img.shape)
 
-        sample = {'img': img, 'annot': annot, 'name': name}
+        sample = {'img': img, 'annot': annot, 'name': name, 'idx': idx}
         if self.transform:
             sample = self.transform(sample)
         return sample
@@ -217,7 +217,7 @@ class CSVDataset(Dataset):
 def collater(data):
     imgs = [s['img'] for s in data]
     annots = [s['annot'] for s in data]
-    #scales = [s['scale'] for s in data]
+    # scales = [s['scale'] for s in data]
     names = [s['name'] for s in data]
 
     widths = [int(s.shape[0]) for s in imgs]
@@ -250,10 +250,10 @@ def collater(data):
 
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
 
-    return {'img': padded_imgs, 'annot': annot_padded,  'name': names}
+    return {'img': padded_imgs, 'annot': annot_padded, 'name': names}
 
 
-def crop_collater_for_validation(data):
+def crop_collater(data):
     imgs = [s['img'] for s in data]
     annots = [s['annot'] for s in data]
     names = [s['name'] for s in data]
@@ -265,12 +265,19 @@ def crop_collater_for_validation(data):
         newCrop = []
         image = imgs[key]
         annotation = annots[key]
+        if image.shape[0] > 1080:
+            scale = 1080/image.shape[0]
+            image = skimage.transform.resize(sm1, (1080, int(image.shape[1] * scale)))
+            annotation[:4] *= scale
+
         rows, cols, cns = image.shape
         mid = int(rows / 20) * 11
         height = int(rows / 3)
         height += 32 - height % 32
-        n = (cols // height)
+        n = 3
         width = height
+
+        x_increment = cols // n
         y_sp = int(mid - height / 2)
 
         # Create half bbx
@@ -283,12 +290,12 @@ def crop_collater_for_validation(data):
 
         # Create small bbx
         for x in range(n):
-            x_sp = x * width
+            x_sp = x * x_increment
             cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
                                     x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
 
         sample_crops = {}
-        scale = height/rows
+        scale = height / rows
         for an in annotation:
             x1, y1, x2, y2, lbl = an
             for key in cropped_imgs:
@@ -316,7 +323,8 @@ def crop_collater_for_validation(data):
 
         for key in cropped_imgs:
             img, sp = cropped_imgs[key]
-            image = torch.FloatTensor(img)
+            image = torch.FloatTensor(img.copy())
+
             newAnno = []
             if key in sample_crops:
                 an = sample_crops[key]
@@ -338,7 +346,9 @@ def crop_collater_for_validation(data):
         torch_imgs = torch_imgs.permute(0, 3, 1, 2)
         cropped_batch_img.append(torch_imgs)
         cropped_batch_annots.append(torch_annots)
+
     cropped_batch_img = torch.cat(cropped_batch_img, dim=0)
+
     cropped_batch_annots = torch.cat(cropped_batch_annots, dim=0)
 
     return {'img': cropped_batch_img, 'annot': cropped_batch_annots, 'name': names}
@@ -493,9 +503,9 @@ class Crop(object):
                 val = np.array(sample_crops[key])
                 img2 = img
                 for v in val:
-                    if (int(v[2])-int(v[0]))*(int(v[3])-int(v[1])) < 16:
+                    if (int(v[2]) - int(v[0])) * (int(v[3]) - int(v[1])) < 16:
                         img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
-                                         (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
+                                             (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
                 plt.imshow(img2)
                 plt.show()
 
@@ -535,13 +545,14 @@ class Resizer(object):
         new_image[:rows, :cols, :] = image.astype(np.float32)
 
         annots[:, :4] *= scale
-        resized_annots = np.ones_like(annots)*-1
+        resized_annots = np.ones_like(annots) * -1
         for x in range(len(annots)):
             area = (annots[x, 2] - annots[x, 0]) * (annots[x, 3] - annots[x, 1])
             if area > 16:
                 resized_annots[x] = annots[x]
 
-        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(resized_annots), 'scale': scale, 'name': name}
+        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(resized_annots), 'scale': scale,
+                  'name': name}
         return sample
 
 
@@ -571,16 +582,24 @@ class Augmenter(object):
 class LabelFlip(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __call__(self, sample, flip_x=0.5):
-        if np.random.rand() < flip_x:
-            image, annots, name = sample['img'], sample['annot'], sample['name']
+    def __init__(self):
+        np.random.seed(0)
+
+    def __call__(self, sample, flip_x=.5):
+        image, annots, name, idx = sample['img'], sample['annot'], sample['name'], sample['idx']
+
+        if idx % 2 == 0:
             f_annots = np.ones_like(annots) * -1
             for x in range(len(annots)):
                 if np.random.rand() < flip_x:
                     f_annots[x] = annots[x]
-                    f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
+                    if f_annots[x, 4] == -1:
+                        continue
+                    else:
+                        f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
                 else:
                     continue
+
             sample = {'img': image, 'annot': f_annots, 'name': name}
 
         return sample
@@ -643,9 +662,7 @@ class AspectRatioBasedSampler(Sampler):
     def group_images(self):
         # determine the order of the images
         order = list(range(len(self.data_source)))
-        #order.sort(key=lambda x: self.data_source.image_aspect_ratio(x))
 
         # divide into groups, one group = one batch
         return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
                 range(0, len(order), self.batch_size)]
-
