@@ -266,7 +266,7 @@ def crop_collater(data):
         image = imgs[key]
         annotation = annots[key]
         if image.shape[0] > 1080:
-            scale = 1080/image.shape[0]
+            scale = 1080 / image.shape[0]
             image = skimage.transform.resize(sm1, (1080, int(image.shape[1] * scale)))
             annotation[:4] *= scale
 
@@ -309,9 +309,9 @@ def crop_collater(data):
                     anno = np.array([n_x1, n_y1, n_x2, n_y2, lbl])
                     if (key == 0) or (key == 1):
                         anno[:4] *= scale
-                    area = (anno[2] - anno[0]) * (anno[3] - anno[1])
-                    if area <= 16:
-                        continue
+                    # area = (anno[2] - anno[0]) * (anno[3] - anno[1])
+                    # if area <= 16:
+                    #     continue
 
                     sample_crops.setdefault(key, []).append(anno)
         sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
@@ -440,37 +440,46 @@ class AddWeather(object):
 class Crop(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __init__(self, val=False, debug=False):
+    def __init__(self, val=False, reweight=False,  debug=False):
         self.val = val
         self.debug = debug
-
+        self.flipflop = 0
+        self.reweight = reweight
         if self.val:
             random.seed(0)
 
     def __call__(self, sample, debug=False):
         image, annots, name = sample['img'], sample['annot'], sample['name']
+        if image.shape[0] > 1080:
+            scale = 1080 / image.shape[0]
+            image = skimage.transform.resize(image, (1080, int(image.shape[1] * scale)))
+            annots[:, :4] *= scale
         rows, cols, cns = image.shape
         mid = int(rows / 20) * 11
         height = int(rows / 3)
         height += 32 - height % 32
-        n = (cols // height)
+        n = 3
         width = height
+
+        x_increment = cols // n
         y_sp = int(mid - height / 2)
 
         # Create half bbx
         cr = cols - rows
-        sm1 = image[:, :rows, :]
-        sm2 = image[:, cr:, :]
-        cropped_imgs = {0: (sm1, (0, 0, rows, rows)),
-                        1: (sm2, (cr, 0, rows, rows))}
+        sm0 = image[:, :rows, :]
+        sm1 = image[:, cr:, :]
+
+        cropped_imgs = {0: (sm0, (0, 0, rows, rows)),
+                        1: (sm1, (cr, 0, rows, rows))}
 
         # Create small bbx
         for x in range(n):
-            x_sp = x * width
+            x_sp = x * x_increment
             cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
                                     x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
 
         sample_crops = {}
+        scale = height / rows
         for an in annots:
             x1, y1, x2, y2, lbl = an
             for key in cropped_imgs:
@@ -482,17 +491,42 @@ class Crop(object):
                     n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
 
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
+                    if (key == 0) or (key == 1):
+                        anno[:4] *= scale
+                    # area = (anno[2] - anno[0]) * (anno[3] - anno[1])
+                    # if area <= 16:
+                    #     continue
                     sample_crops.setdefault(key, []).append(anno)
+
+        sm0 = skimage.transform.resize(sm0, (int(height), int(round(width))))
+        i, s = cropped_imgs[0]
+        cropped_imgs[0] = (sm0, s)
+
+        sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
+        i, s = cropped_imgs[1]
+        cropped_imgs[1] = (sm1, s)
 
         keys = list(cropped_imgs.keys())
         key = random.choice(keys)
         img = cropped_imgs[key][0]
-        val = annots
+        annotations = annots
         if len(sample_crops) > 0:
             keys = list(sample_crops.keys())
             key = random.choice(keys)
             img = cropped_imgs[key][0]
-            val = np.array(sample_crops[key])
+            annotations = np.array(sample_crops[key])
+            # if self.reweight:
+            #     keys = []
+            #     for k in sample_crops:
+            #         if self.flipflop == 0 and sample_crops[k][4] == 1:
+            #             keys.append(k)
+            #         elif self.flipflop == 1:
+            #             keys.append(k)
+            #     if len(keys) > 0:
+            #         key = random.choice(keys)
+            #         img = cropped_imgs[key][0]
+            #         annotation = np.array(sample_crops[key])
+            #     self.flipflop = 0 if self.flipflop == 1 else 1
 
         if debug:
             import matplotlib.pyplot as plt
@@ -500,16 +534,16 @@ class Crop(object):
 
             for key in sample_crops:
                 img = cropped_imgs[key][0]
-                val = np.array(sample_crops[key])
+                annotations = np.array(sample_crops[key])
                 img2 = img
-                for v in val:
+                for v in annotations:
                     if (int(v[2]) - int(v[0])) * (int(v[3]) - int(v[1])) < 16:
                         img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
                                              (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
                 plt.imshow(img2)
                 plt.show()
 
-        return {'img': img, 'annot': val, 'name': name}
+        return {'img': img, 'annot': annotations, 'name': name}
 
 
 class Resizer(object):
@@ -545,13 +579,13 @@ class Resizer(object):
         new_image[:rows, :cols, :] = image.astype(np.float32)
 
         annots[:, :4] *= scale
-        resized_annots = np.ones_like(annots) * -1
-        for x in range(len(annots)):
-            area = (annots[x, 2] - annots[x, 0]) * (annots[x, 3] - annots[x, 1])
-            if area > 16:
-                resized_annots[x] = annots[x]
+        # resized_annots = np.ones_like(annots) * -1
+        # for x in range(len(annots)):
+        #     area = (annots[x, 2] - annots[x, 0]) * (annots[x, 3] - annots[x, 1])
+        #     if area > 16:
+        #         resized_annots[x] = annots[x]
 
-        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(resized_annots), 'scale': scale,
+        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale,
                   'name': name}
         return sample
 
@@ -588,15 +622,12 @@ class LabelFlip(object):
     def __call__(self, sample, flip_x=.5):
         image, annots, name, idx = sample['img'], sample['annot'], sample['name'], sample['idx']
 
-        if idx % 2 == 0:
+        if idx % 4 == 0:
             f_annots = np.ones_like(annots) * -1
             for x in range(len(annots)):
                 if np.random.rand() < flip_x:
-                    f_annots[x] = annots[x]
-                    if f_annots[x, 4] == -1:
-                        continue
-                    else:
-                        f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
+                    f_annots[x] = annots[x].copy()
+                    f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
                 else:
                     continue
 

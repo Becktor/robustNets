@@ -46,6 +46,7 @@ def main(args=None):
             "ResNet": parser.depth,
             "reweight": 0,
             "milestones": [10, 75, 100],
+            "step_size": 50,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
@@ -74,8 +75,8 @@ def main(args=None):
         dataset_weight = None
         print('No validation annotations provided.')
     else:
-        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes, use_path=True,
-                                    transform=transforms.Compose([Augmenter()]))
+        dataset_weight = CSVDataset(train_file=parser.csv_weight,  class_list=parser.csv_classes, use_path=True,
+                                    transform=transforms.Compose([Crop(reweight=True), Augmenter(), Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
     dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater,
@@ -83,18 +84,16 @@ def main(args=None):
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
-        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater,
-                                    batch_sampler=sampler_val)
-    sampler_weight = AspectRatioBasedSampler(dataset_weight, batch_size=parser.batch_size//4, drop_last=True)
-    dataloader_weight = DataLoader(dataset_weight, num_workers=3,
-                                   collate_fn=crop_collater, batch_sampler=sampler_weight)
+        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater, batch_sampler=sampler_val)
 
+    dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
+                                   shuffle=True)
     pre_trained = False
     if parser.pre_trained:
         pre_trained = True
     # Create the model
     if parser.depth == 1:
-        model = retinanet.rresnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet.rresnet18(num_classes=dataset_train.num_classes())
     elif parser.depth == 18:
         model = retinanet.resnet18(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 34:
@@ -117,8 +116,10 @@ def main(args=None):
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
     n_iters = len(dataset_train) / parser.batch_size
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
-                                            step_size_up=n_iters, cycle_momentum=False)
+    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
+                                          gamma=config.gamma)
+    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3,
+    #                                        step_size_up=n_iters, cycle_momentum=False)
 
     prev_epoch = 0
     if parser.continue_training is None:
@@ -231,12 +232,14 @@ def main(args=None):
             loss.backward()
             optimizer.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-            scheduler.step()
+
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
             runtime = (time.time() - t0) / (1 + iter_num)
             if iter_num % 2 == 0:
                 lr = get_lr(optimizer)
+                if len(m_epoch_loss) == 0:
+                    m_epoch_loss.append(0)
                 print(
                     'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
                     'mel: {:1.5f} el: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
@@ -244,6 +247,7 @@ def main(args=None):
                                                                   runtime), end='\r')
             del classification_loss
             del regression_loss
+        scheduler.step()
         runtime = time.time() - t0
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
         if parser.csv_val is not None:
