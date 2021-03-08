@@ -4,7 +4,6 @@ import datetime as dt
 import numpy as np
 import torch.optim as optim
 from torchvision import transforms
-from torch.utils.tensorboard import SummaryWriter
 from network import retinanet, csv_eval
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, \
     crop_collater, LabelFlip
@@ -33,7 +32,7 @@ def main(args=None):
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
-    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
+    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=False)
 
     parser = parser.parse_args(args)
 
@@ -44,9 +43,9 @@ def main(args=None):
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 0,
+            "reweight": 50,
             "milestones": [10, 75, 100],
-            "step_size": 50,
+            "step_size": 100,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,

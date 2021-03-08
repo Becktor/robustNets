@@ -33,7 +33,7 @@ class FocalLoss(nn.Module):
         batch_size = classifications.shape[0]
         classification_losses = []
         regression_losses = []
-        iou_thresh = .3
+        iou_thresh = .5
         anchor = anchors[0, :, :]
         anchor_widths = anchor[:, 2] - anchor[:, 0]
         anchor_heights = anchor[:, 3] - anchor[:, 1]
@@ -63,7 +63,7 @@ class FocalLoss(nn.Module):
             targets = torch.ones(classification.shape) * -1
             targets = targets.cuda()
 
-            targets[torch.lt(IoU_max, iou_thresh), :] = 0
+            targets[torch.lt(IoU_max, iou_thresh-0.1), :] = 0
 
             positive_indices = torch.ge(IoU_max, iou_thresh)
             num_positive_anchors = positive_indices.sum()

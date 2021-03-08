@@ -491,20 +491,7 @@ class Crop(object):
                     n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
 
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
-                    if (key == 0) or (key == 1):
-                        anno[:4] *= scale
-                    # area = (anno[2] - anno[0]) * (anno[3] - anno[1])
-                    # if area <= 16:
-                    #     continue
                     sample_crops.setdefault(key, []).append(anno)
-
-        sm0 = skimage.transform.resize(sm0, (int(height), int(round(width))))
-        i, s = cropped_imgs[0]
-        cropped_imgs[0] = (sm0, s)
-
-        sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
-        i, s = cropped_imgs[1]
-        cropped_imgs[1] = (sm1, s)
 
         keys = list(cropped_imgs.keys())
         key = random.choice(keys)
