@@ -12,6 +12,7 @@ from utils import *
 import wandb
 import time
 import copy
+import csv
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -28,11 +29,11 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=64)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=20)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
-    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=False)
+    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
 
     parser = parser.parse_args(args)
 
@@ -43,9 +44,9 @@ def main(args=None):
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 50,
+            "reweight": 690,
             "milestones": [10, 75, 100],
-            "step_size": 100,
+            "step_size": 50,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
@@ -58,7 +59,7 @@ def main(args=None):
     Data loaders
     """
     if parser.label_flip:
-        trans = [LabelFlip(), Crop(), Augmenter(), Resizer()]
+        trans = [LabelFlip(mod=1), Crop(), Augmenter(), Resizer()]
     else:
         trans = [Crop(), Augmenter(), Resizer()]
     dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
@@ -105,7 +106,6 @@ def main(args=None):
         model = retinanet.resnet152(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     else:
         raise ValueError('Unsupported model depth, must be one of 18, 34, 50, 101, 152')
-
     """
        Optimizer
     """
@@ -115,10 +115,10 @@ def main(args=None):
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
     n_iters = len(dataset_train) / parser.batch_size
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
-                                          gamma=config.gamma)
-    #scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=1e-3,
-    #                                        step_size_up=n_iters, cycle_momentum=False)
+    #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
+     #                                     gamma=config.gamma)
+    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
+                                            step_size_up=n_iters, cycle_momentum=False)
 
     prev_epoch = 0
     if parser.continue_training is None:
@@ -148,6 +148,9 @@ def main(args=None):
         model = model.cuda()
     model = model.cuda()
     torch.backends.cudnn.benchmark = True
+
+    reweight_cases = {}
+
     for epoch_num in range(parser.epochs):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
@@ -166,7 +169,7 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image = to_var(data['img'], requires_grad=False)
             labels = to_var(data['annot'], requires_grad=False)
-            # names = data['name']
+            names = data['name']
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
             loss = torch.mean(cost)
@@ -177,8 +180,10 @@ def main(args=None):
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
-                meta_model = copy.deepcopy(model)
-                meta_model.cuda()
+                meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
+                meta_model.load_state_dict(model.state_dict())
+                if torch.cuda.is_available():
+                    meta_model.cuda()
 
                 # Lines 4 - 5 initial forward pass to compute the initial weighted loss
 
@@ -194,6 +199,12 @@ def main(args=None):
                 if any(x is None for x in grads):
                     skipped_iters += 1
                     continue
+
+                # gp = zip(meta_model.parameters(), grads)
+                # for p, g in gp:
+                #     new_val = p - lr * g
+                #     p.data = new_val
+
                 # Perform a parameter update
                 meta_model.update_params(lr, source_params=grads)
 
@@ -201,7 +212,7 @@ def main(args=None):
                     # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
                     v_image = to_var(weighted_data['img'], requires_grad=False)
                     v_labels = to_var(weighted_data['annot'], requires_grad=False)
-                    names = weighted_data['name']
+                    w_names = weighted_data['name']
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
                     m_epoch_loss.append(float(l_g_meta))
@@ -212,12 +223,26 @@ def main(args=None):
 
                     # Line 11 computing and normalizing the weights
                     w_tilde = torch.clamp(-grad_eps.detach(), min=0)
+
                     norm_c = torch.sum(w_tilde)
 
                     if norm_c != 0:
                         w = w_tilde / norm_c
                     else:
                         w = w_tilde
+
+                    wl = torch.le(w, 0.01)
+                    for index, weight in enumerate(w):
+                        if wl[index]:
+                            if names[index] in reweight_cases:
+                                tmp = reweight_cases[names[index]]
+                                tmpL = tmp[1]
+                                tmpL.append(float(weight))
+                                tmp = (tmp[0] + 1, tmpL)
+                                reweight_cases[names[index]] = tmp
+                            else:
+                                reweight_cases[names[index]] = (1, [float(weight)])
+
                     loss = torch.sum(cost * w)
                     break
 
@@ -231,7 +256,7 @@ def main(args=None):
             loss.backward()
             optimizer.step()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
-
+            scheduler.step()
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
             runtime = (time.time() - t0) / (1 + iter_num)
@@ -246,9 +271,19 @@ def main(args=None):
                                                                   runtime), end='\r')
             del classification_loss
             del regression_loss
-        scheduler.step()
+
         runtime = time.time() - t0
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
+
+        try:
+            with open('reweight_cases.csv', 'w') as csv_file:
+                writer = csv.writer(csv_file)
+                for key, value in reweight_cases.items():
+                    if value[0] > 1:
+                        writer.writerow([key, value])
+        except IOError:
+            print("I/O error")
+
         if parser.csv_val is not None:
             print('Evaluating dataset')
 

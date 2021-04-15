@@ -309,11 +309,9 @@ def crop_collater(data):
                     anno = np.array([n_x1, n_y1, n_x2, n_y2, lbl])
                     if (key == 0) or (key == 1):
                         anno[:4] *= scale
-                    # area = (anno[2] - anno[0]) * (anno[3] - anno[1])
-                    # if area <= 16:
-                    #     continue
-
-                    sample_crops.setdefault(key, []).append(anno)
+                    area = (anno[2] - anno[0]) * (anno[3] - anno[1])
+                    if area >= 16:
+                        sample_crops.setdefault(key, []).append(anno)
         sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
         sm2 = skimage.transform.resize(sm2, (int(height), int(round(width))))
 
@@ -566,13 +564,13 @@ class Resizer(object):
         new_image[:rows, :cols, :] = image.astype(np.float32)
 
         annots[:, :4] *= scale
-        # resized_annots = np.ones_like(annots) * -1
-        # for x in range(len(annots)):
-        #     area = (annots[x, 2] - annots[x, 0]) * (annots[x, 3] - annots[x, 1])
-        #     if area > 16:
-        #         resized_annots[x] = annots[x]
+        resized_annots = np.ones_like(annots) * -1
+        for x in range(len(annots)):
+            area = (annots[x, 2] - annots[x, 0]) * (annots[x, 3] - annots[x, 1])
+            if area > 16:
+                resized_annots[x] = annots[x]
 
-        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(annots), 'scale': scale,
+        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(resized_annots), 'scale': scale,
                   'name': name}
         return sample
 
@@ -603,13 +601,14 @@ class Augmenter(object):
 class LabelFlip(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __init__(self):
+    def __init__(self, mod=2):
         np.random.seed(0)
+        self.mod = mod
 
     def __call__(self, sample, flip_x=.5):
         image, annots, name, idx = sample['img'], sample['annot'], sample['name'], sample['idx']
 
-        if idx % 4 == 0:
+        if idx % self.mod != 0:
             f_annots = np.ones_like(annots) * -1
             for x in range(len(annots)):
                 if np.random.rand() < flip_x:
