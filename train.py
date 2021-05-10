@@ -17,7 +17,7 @@ import csv
 assert torch.__version__.split('.')[0] == '1'
 
 
-#if 'PYCHARM' in os.environ:
+# if 'PYCHARM' in os.environ:
 #    os.environ["WANDB_MODE"] = "dryrun"
 
 def main(args=None):
@@ -34,9 +34,13 @@ def main(args=None):
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
     parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
+    parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=2)
 
     parser = parser.parse_args(args)
 
+    reweight_mods = {0: "0%", 2: "50%", 3: "33%", 4: "25%"}
+
+    reweight_mod = reweight_mods[parser.flip_mod]
     if parser.continue_training is not None:
         id = parser.continue_training[-8:]
         wandb.init(project="reweight", id=id, resume=True)
@@ -44,25 +48,23 @@ def main(args=None):
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 690,
+            "reweight": 0,
             "milestones": [10, 75, 100],
             "step_size": 50,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
             "batch_size": parser.batch_size,
-            "label_flip": parser.label_flip
+            "reweight_mod": reweight_mod
         })
     config = wandb.config
     wandb_name = wandb.run.name + "_" + wandb.run.id
     """
     Data loaders
     """
-    if parser.label_flip:
-        trans = [LabelFlip(mod=1), Crop(), Augmenter(), Resizer()]
-    else:
-        trans = [Crop(), Augmenter(), Resizer()]
-    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes, use_path=True,
+
+    trans = [LabelFlip(mod=parser.flip_mod), Crop(), Augmenter(), Resizer()]
+    dataset_train = CSVDataset(train_file=parser.csv_train, class_list=parser.csv_classes,
                                transform=transforms.Compose(trans))
 
     if parser.csv_val is None:
@@ -75,7 +77,7 @@ def main(args=None):
         dataset_weight = None
         print('No validation annotations provided.')
     else:
-        dataset_weight = CSVDataset(train_file=parser.csv_weight,  class_list=parser.csv_classes, use_path=True,
+        dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes,
                                     transform=transforms.Compose([Crop(reweight=True), Augmenter(), Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
@@ -115,8 +117,8 @@ def main(args=None):
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
     n_iters = len(dataset_train) / parser.batch_size
-    #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
-     #                                     gamma=config.gamma)
+    # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
+    #                                     gamma=config.gamma)
     scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
                                             step_size_up=n_iters, cycle_momentum=False)
 
@@ -150,7 +152,7 @@ def main(args=None):
     torch.backends.cudnn.benchmark = True
 
     reweight_cases = {}
-
+    altered_labels = {}
     for epoch_num in range(parser.epochs):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
@@ -167,9 +169,13 @@ def main(args=None):
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
         for iter_num, data in enumerate(dataloader_train):
-            image = to_var(data['img'], requires_grad=False)
-            labels = to_var(data['annot'], requires_grad=False)
-            names = data['name']
+            image, labels, names, idxs = data.as_batch()
+
+            # update labels that are poor according to reweight mechanism.
+            for x in range(len(labels)):
+                if labels[x] in altered_labels:
+                    labels[x] = altered_labels[labels[x]]
+
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
             loss = torch.mean(cost)
@@ -210,16 +216,16 @@ def main(args=None):
 
                 for weighted_data in dataloader_weight:
                     # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
-                    v_image = to_var(weighted_data['img'], requires_grad=False)
-                    v_labels = to_var(weighted_data['annot'], requires_grad=False)
-                    w_names = weighted_data['name']
+                    v_image, v_labels, w_names, idxs = weighted_data.as_batch()
+
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
                     m_epoch_loss.append(float(l_g_meta))
                     if l_g_meta == zero_tensor:
                         zero_loss += 1
                         continue
-                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]  # find gradients with regard to epsilon
+                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[
+                        0]  # find gradients with regard to epsilon
 
                     # Line 11 computing and normalizing the weights
                     w_tilde = torch.clamp(-grad_eps.detach(), min=0)
@@ -231,17 +237,35 @@ def main(args=None):
                     else:
                         w = w_tilde
 
-                    wl = torch.le(w, 0.01)
+                    wl = torch.le(w, 0.005)
+                    update_anno = np.full(20, False)
+                    lookup_id = np.full(20, '')
                     for index, weight in enumerate(w):
                         if wl[index]:
                             if names[index] in reweight_cases:
-                                tmp = reweight_cases[names[index]]
-                                tmpL = tmp[1]
-                                tmpL.append(float(weight))
-                                tmp = (tmp[0] + 1, tmpL)
-                                reweight_cases[names[index]] = tmp
+                                tmp_cnt, tmp_loss = reweight_cases[names[index]]
+                                tmp_loss.append(float(weight))
+                                sample = (tmp_cnt + 1, tmp_loss)
+                                reweight_cases[names[index]] = sample
+                                if tmp_cnt > 0:  # arbitrarily chosen
+                                    trans[0].alt(idxs[index], sample)
+                                    update_anno[index] = True
                             else:
                                 reweight_cases[names[index]] = (1, [float(weight)])
+                               # trans[0].alt(idxs[index], sample)
+                                update_anno[index] = True
+
+                    meta_model.training = False
+                    if update_anno.sum() > 0:
+                        update_img = image[update_anno]
+                        update_names = np.array(idxs)[update_anno]
+                        score, classes, bbox = meta_model(update_img)
+                        for i in range(len(score)):
+                            if score[i] > 0:
+                                c = classes[i]
+                                b = bbox[i]
+                                new_anno = torch.cat([b, c.reshape([-1, 1])], axis=1)
+                                altered_labels[update_names[i]] = new_anno
 
                     loss = torch.sum(cost * w)
                     break
@@ -267,13 +291,17 @@ def main(args=None):
                 print(
                     'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
                     'mel: {:1.5f} el: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
-                                                                  float(regression_loss), np.mean(m_epoch_loss), np.mean(epoch_loss), float(lr),
-                                                                  runtime), end='\r')
+                                                                               float(regression_loss),
+                                                                               np.mean(m_epoch_loss),
+                                                                               np.mean(epoch_loss), float(lr),
+                                                                               runtime), end='\r')
             del classification_loss
             del regression_loss
 
         runtime = time.time() - t0
         print("\nEpoch {} took: {}".format(curr_epoch, runtime))
+
+        # Reannotate poor annotations given reweight cases
 
         try:
             with open('reweight_cases.csv', 'w') as csv_file:

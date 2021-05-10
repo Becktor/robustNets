@@ -16,11 +16,102 @@ from future.utils import raise_from
 from torch.utils.data import Dataset
 from torch.utils.data.sampler import Sampler
 
+from utils import to_var
+
+
+class Batch:
+    """CSV batch"""
+
+    def __init__(self, samples):
+        self._samples = samples
+        self.i = 0
+
+    def as_batch(self):
+        imgs = [s.img for s in self._samples]
+        annots = [s.annot for s in self._samples]
+        names = [s.name for s in self._samples]
+        idx = [s.index for s in self._samples]
+
+        torch_img = to_var(torch.stack(imgs))
+        torch_annots = to_var(torch.stack(annots))
+
+        return torch_img, torch_annots, names, idx
+
+    def __iter__(self):
+        return self
+
+    def __next__(self):
+        if self.i < len(self._samples):
+            elem = self._samples[self.i]
+            self.i += 1
+            return elem
+        else:
+            raise StopIteration()
+
+    @property
+    def samples(self):
+        return self._samples
+
+
+class Sample:
+    """CSV sample"""
+
+    def __init__(self, img, annot, name, index, parent=None):
+        self._img = img
+        self._annot = annot
+        self._name = name
+        self._index = index
+        self._parent = parent
+        self._alt = False
+
+    @property
+    def img(self):
+        return self._img
+
+    @img.setter
+    def img(self, value):
+        self._img = value
+
+    @property
+    def annot(self):
+        return self._annot
+
+    @annot.setter
+    def annot(self, value):
+        self._annot = value
+
+    @property
+    def name(self):
+        return self._name
+
+    @name.setter
+    def name(self, value):
+        self._name = value
+
+    @property
+    def index(self):
+        return self._index
+
+    @index.setter
+    def index(self, value):
+        self._index = value
+
+    @property
+    def alt(self):
+        if self._parent is None:
+            return self._alt
+        else:
+            return self._parent.alt
+
+    @img.setter
+    def alt(self, value):
+        self._alt = value
+
 
 class CSVDataset(Dataset):
     """CSV dataset."""
 
-    def __init__(self, train_file, class_list, use_path=False, transform=None):
+    def __init__(self, train_file, class_list, use_path=True, transform=None):
         """
         Args:
             train_file (string): CSV file with training annotations
@@ -108,7 +199,8 @@ class CSVDataset(Dataset):
         name = self.image_names[idx]
         annot = self.load_annotations(idx, img.shape)
 
-        sample = {'img': img, 'annot': annot, 'name': name, 'idx': idx}
+        sample = Sample(img, annot, name, idx)
+
         if self.transform:
             sample = self.transform(sample)
         return sample
@@ -118,7 +210,7 @@ class CSVDataset(Dataset):
         name = self.image_names[idx]
         annot = self.load_annotations(idx, img.shape)
 
-        sample = {'img': img, 'annot': annot, 'name': name}
+        sample = Sample(img, annot, name, idx)
         if self.transform:
             sample = self.transform(sample)
         return sample
@@ -215,10 +307,10 @@ class CSVDataset(Dataset):
 
 
 def collater(data):
-    imgs = [s['img'] for s in data]
-    annots = [s['annot'] for s in data]
-    # scales = [s['scale'] for s in data]
-    names = [s['name'] for s in data]
+    imgs = [s.img for s in data]
+    annots = [s.annot for s in data]
+    names = [s.name for s in data]
+    index = [s.index for s in data]
 
     widths = [int(s.shape[0]) for s in imgs]
     heights = [int(s.shape[1]) for s in imgs]
@@ -249,22 +341,26 @@ def collater(data):
         annot_padded = torch.ones((len(annots), 1, 5)) * -1
 
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
+    collated_samples = []
+    for i, img in enumerate(padded_imgs):
+        collated_samples.append(Sample(img, annot_padded[i], names[i], index[i]))
 
-    return {'img': padded_imgs, 'annot': annot_padded, 'name': names}
+    batch = Batch(collated_samples)
+    return batch
 
 
 def crop_collater(data):
-    imgs = [s['img'] for s in data]
-    annots = [s['annot'] for s in data]
-    names = [s['name'] for s in data]
+    imgs = [s.img for s in data]
+    annots = [s.annot for s in data]
+    names = [s.name for s in data]
+    index = [s.index for s in data]
     batch_size = len(imgs)
-    cropped_batch_img = []
-    cropped_batch_annots = []
+    collated_samples = []
     max_num_annots = max(a.shape[0] for a in annots)
-    for key in range(batch_size):
-        newCrop = []
-        image = imgs[key]
-        annotation = annots[key]
+    for batch_elem in range(batch_size):
+        new_crop = []
+        image = imgs[batch_elem]
+        annotation = annots[batch_elem]
         if image.shape[0] > 1080:
             scale = 1080 / image.shape[0]
             image = skimage.transform.resize(sm1, (1080, int(image.shape[1] * scale)))
@@ -323,18 +419,18 @@ def crop_collater(data):
             img, sp = cropped_imgs[key]
             image = torch.FloatTensor(img.copy())
 
-            newAnno = []
+            new_anno = []
             if key in sample_crops:
                 an = sample_crops[key]
                 annot = torch.FloatTensor(an)
-                newAnno = annot
-            newCrop.append((image, newAnno))
+                new_anno = annot
+            new_crop.append((image, new_anno))
 
-        torch_imgs = torch.zeros(len(newCrop), width, height, 3)
-        torch_annots = torch.ones((len(newCrop), max_num_annots, 5)) * -1
+        torch_imgs = torch.zeros(len(new_crop), width, height, 3)
+        torch_annots = torch.ones((len(new_crop), max_num_annots, 5)) * -1
 
-        for i in range(len(newCrop)):
-            img, an = newCrop[i]
+        for i in range(len(new_crop)):
+            img, an = new_crop[i]
             torch_imgs[i, :int(img.shape[0]), :int(img.shape[1]), :] = img
 
             if max_num_annots > 0:
@@ -342,14 +438,16 @@ def crop_collater(data):
                     torch_annots[i, :an.shape[0], :] = an
 
         torch_imgs = torch_imgs.permute(0, 3, 1, 2)
-        cropped_batch_img.append(torch_imgs)
-        cropped_batch_annots.append(torch_annots)
+        for i in range(torch_imgs.shape[0]):
+            img = torch_imgs[i]
+            an = torch_annots[i]
+            nm = names[batch_elem]
+            id = index[batch_elem]
+            d = data[batch_elem]
 
-    cropped_batch_img = torch.cat(cropped_batch_img, dim=0)
-
-    cropped_batch_annots = torch.cat(cropped_batch_annots, dim=0)
-
-    return {'img': cropped_batch_img, 'annot': cropped_batch_annots, 'name': names}
+            collated_samples.append(Sample(img, an, nm, id, d))
+    batch = Batch(collated_samples)
+    return batch
 
 
 class Gaussian(object):
@@ -357,13 +455,16 @@ class Gaussian(object):
         self.noise_level = noise_level
 
     def __call__(self, sample):
-        image, annots = sample['img'], sample['annot']
+        image = sample.img
+        annots = sample.annot
         if self.noise_level > 0:
             image = image + torch.empty(image.shape).normal_(mean=0, std=self.noise_level).numpy()
             image = np.clip(0, 1, image)
         # temp_img = (image * 255).astype(np.uint8)
         # Image.fromarray(temp_img).save("noisy.png")
-        return {'img': image.astype(np.float32), 'annot': annots}
+        sample.img = image.astype(np.float32)
+        sample.annot = annots
+        return sample
 
 
 class GaussianBlur(object):
@@ -373,16 +474,19 @@ class GaussianBlur(object):
         self.blur = iaa.Sequential(iaa.blur.GaussianBlur(level))
 
     def __call__(self, sample, val=False):
-        image, annots = sample['img'], sample['annot']
+        image = sample.img
+        annots = sample.annot
         if self.level <= 0:
-            return {'img': image, 'annot': annots}
+            return sample
         uint8_image = (image * 255).astype(np.uint8)
         # Image.fromarray(uint8_image).save("Blur_inp.png")
         aug_image = self.blur(image=uint8_image)
         # Image.fromarray(aug_image).save("Blur_aug.png")
         image = aug_image.astype(np.float) / 255
         image = np.clip(0, 1, image)
-        return {'img': image.astype(np.float32), 'annot': annots}
+        sample.img = image.astype(np.float32)
+        sample.annot = annots
+        return sample
 
 
 class SAP(object):
@@ -393,7 +497,8 @@ class SAP(object):
         self.sap = iaa.Sequential(iaa.SaltAndPepper(percentage), channel_wise)
 
     def __call__(self, sample, val=False):
-        image, annots = sample['img'], sample['annot']
+        image = sample.img
+        annots = sample.annot
         if self.per <= 0:
             return {'img': image, 'annot': annots}
         uint8_image = (image * 255).astype(np.uint8)
@@ -402,7 +507,9 @@ class SAP(object):
         Image.fromarray(aug_image).save("SP_aug.png")
         image = aug_image.astype(np.float) / 255
         image = np.clip(0, 1, image)
-        return {'img': image.astype(np.float32), 'annot': annots}
+        sample.img = image.astype(np.float32)
+        sample.annot = annots
+        return sample
 
 
 class AddWeather(object):
@@ -420,7 +527,8 @@ class AddWeather(object):
             self.weight = 3 - weight
 
     def __call__(self, sample, val=False):
-        image, annots = sample['img'], sample['annot']
+        image = sample.img
+        annots = sample.annot
         if self.weight < 0:
             return {'img': image, 'annot': annots}
         uint8_image = (image * 255).astype(np.uint8)
@@ -432,13 +540,15 @@ class AddWeather(object):
         image = np.clip(0, 1, image)
         # temp_img = (image * 255).astype(np.uint8)
         # Image.fromarray(temp_img).save("noisy.png")
-        return {'img': image.astype(np.float32), 'annot': annots}
+        sample.img = image.astype(np.float32)
+        sample.annot = annots
+        return sample
 
 
 class Crop(object):
     """Convert ndarrays in sample to Tensors."""
 
-    def __init__(self, val=False, reweight=False,  debug=False):
+    def __init__(self, val=False, reweight=False, debug=False):
         self.val = val
         self.debug = debug
         self.flipflop = 0
@@ -447,7 +557,9 @@ class Crop(object):
             random.seed(0)
 
     def __call__(self, sample, debug=False):
-        image, annots, name = sample['img'], sample['annot'], sample['name']
+        image = sample.img
+        annots = sample.annot
+        name = sample.name
         if image.shape[0] > 1080:
             scale = 1080 / image.shape[0]
             image = skimage.transform.resize(image, (1080, int(image.shape[1] * scale)))
@@ -520,23 +632,26 @@ class Crop(object):
             for key in sample_crops:
                 img = cropped_imgs[key][0]
                 annotations = np.array(sample_crops[key])
-                img2 = img
+                tmp_img = img
                 for v in annotations:
                     if (int(v[2]) - int(v[0])) * (int(v[3]) - int(v[1])) < 16:
-                        img2 = cv2.rectangle(img, (int(v[0]), int(v[1])),
-                                             (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
-                plt.imshow(img2)
+                        tmp_img = cv2.rectangle(img, (int(v[0]), int(v[1])),
+                                                (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
+                plt.imshow(tmp_img)
                 plt.show()
-
-        return {'img': img, 'annot': annotations, 'name': name}
+        sample.img = img
+        sample.annot = annotations
+        sample.name = name
+        return sample
 
 
 class Resizer(object):
     """Convert ndarrays in sample to Tensors."""
 
     def __call__(self, sample, min_side=384, max_side=512):
-        image, annots, name = sample['img'], sample['annot'], sample['name']
-
+        image = sample.img
+        annots = sample.annot
+        name = sample.name
         rows, cols, cns = image.shape
 
         smallest_side = min(rows, cols)
@@ -570,8 +685,10 @@ class Resizer(object):
             if area > 16:
                 resized_annots[x] = annots[x]
 
-        sample = {'img': torch.from_numpy(new_image), 'annot': torch.from_numpy(resized_annots), 'scale': scale,
-                  'name': name}
+        sample.img = torch.from_numpy(new_image)
+        sample.annot = torch.from_numpy(resized_annots)
+        sample.name = name
+
         return sample
 
 
@@ -580,7 +697,9 @@ class Augmenter(object):
 
     def __call__(self, sample, flip_x=0.5):
         if np.random.rand() < flip_x:
-            image, annots, name = sample['img'], sample['annot'], sample['name']
+            image = sample.img
+            annots = sample.annot
+            name = sample.name
             image = image[:, ::-1, :]
 
             rows, cols, channels = image.shape
@@ -593,7 +712,9 @@ class Augmenter(object):
             annots[:, 0] = cols - x2
             annots[:, 2] = cols - x_tmp
 
-            sample = {'img': image, 'annot': annots, 'name': name}
+            sample.img = image
+            sample.annot = annots
+            sample.name = name
 
         return sample
 
@@ -603,12 +724,16 @@ class LabelFlip(object):
 
     def __init__(self, mod=2):
         np.random.seed(0)
-        self.mod = mod
+        self._mod = mod
+        self._alt = {}
 
     def __call__(self, sample, flip_x=.5):
-        image, annots, name, idx = sample['img'], sample['annot'], sample['name'], sample['idx']
-
-        if idx % self.mod != 0:
+        image = sample.img
+        annots = sample.annot
+        idx = sample.index
+        if self._mod == 0 or idx in self._alt:
+            return sample
+        elif idx % self._mod == 0:
             f_annots = np.ones_like(annots) * -1
             for x in range(len(annots)):
                 if np.random.rand() < flip_x:
@@ -616,11 +741,12 @@ class LabelFlip(object):
                     f_annots[x, 4] = 0 if f_annots[x, 4] == 1 else 1
                 else:
                     continue
-
-            sample = {'img': image, 'annot': f_annots, 'name': name}
-
+            sample.img = image
+            sample.annot = f_annots
         return sample
 
+    def alt(self, key, value):
+        self._alt[key] = value
 
 class Normalizer(object):
 
@@ -629,9 +755,8 @@ class Normalizer(object):
         self.std = np.array([[[0.229, 0.224, 0.225]]])
 
     def __call__(self, sample):
-        image, annots = sample['img'], sample['annot']
-
-        return {'img': ((image.astype(np.float32) - self.mean) / self.std), 'annot': annots}
+        sample.img = ((sample.img.astype(np.float32) - self.mean) / self.std)
+        return sample
 
 
 class UnNormalizer(object):

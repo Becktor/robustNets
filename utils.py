@@ -68,10 +68,10 @@ def count_parameters(model):
     return total_params
 
 
-def plot_input(data, title="input"):
-    images = data['img'].cpu().numpy()
-    labels = data['annot'].cpu().numpy()
-    names = data['names']
+def plot_input(v_image, v_labels, w_names, title="input"):
+    images = v_image.cpu().detach().numpy()
+    labels = v_labels.cpu().detach().numpy()
+    names = w_names
     for i in range(len(images)):
         img = images[i].transpose([1, 2, 0])
         val = labels[i]
@@ -84,5 +84,21 @@ def plot_input(data, title="input"):
             img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
                                  (int(v[2]), int(v[3])), color=color, thickness=2)
         plt.imshow(img2)
-        plt.title(title+"-> Bouy is blue, boat is green")
+        plt.title(title+"-> Bouy is blue, boat is green indx: " + str(i))
         plt.show()
+
+
+def plot_sample(img, lbl, title="input"):
+    img = img.cpu().detach().numpy().transpose([1, 2, 0])
+    val = lbl.cpu().detach().numpy()
+    img2 = img.copy()
+    for x,v in enumerate(val):
+        color = (0, 1, 0)
+        if v[4] == 0:
+            color = (0, 0, 1)
+
+        img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
+                             (int(v[2]), int(v[3])), color=color, thickness=2)
+    plt.imshow(img2)
+    plt.title(title+"-> Bouy is blue, boat is green")
+    plt.show()

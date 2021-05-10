@@ -3,7 +3,7 @@ import math
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
-from torchvision.ops import nms
+from torchvision.ops import nms, batched_nms
 
 from network import losses
 from network.anchors import Anchors
@@ -272,21 +272,37 @@ class ResNet(MetaModule):
 
             scores = torch.max(classification, dim=2, keepdim=True)[0]
 
-            scores_over_thresh = (scores > 0.05)[0, :, 0]  # certainty threshold
+            scores_over_thresh = (scores > 0.3)[:, :, 0]  # certainty threshold
 
             if scores_over_thresh.sum() == 0:
                 # no boxes to NMS, just return
                 return [torch.zeros(0), torch.zeros(0), torch.zeros(0, 4)]
 
-            classification = classification[:, scores_over_thresh, :]
-            transformed_anchors = transformed_anchors[:, scores_over_thresh, :]
-            scores = scores[:, scores_over_thresh, :]
+            classification = [classification[i, scores_over_thresh[i], :] for i in range(classification.shape[0])]
+            transformed_anchors = [transformed_anchors[i, scores_over_thresh[i], :] for i in range(transformed_anchors.shape[0])]
+            scores = [scores[i, scores_over_thresh[i], :] for i in range(scores.shape[0])]
 
-            anchors_nms_idx = nms(transformed_anchors[0, :, :], scores[0, :, 0], 0.5)  # iou?
+            batched_nms_idxs = [nms(transformed_anchors[i], scores[i][:, 0], 0.1) for i in
+                                range(len(transformed_anchors))]
+            scores_classes = []
+            for i, c in enumerate(classification):
+                kk = batched_nms_idxs[i]
+                s = (-1, -1)
+                if len(kk) > 0:
+                    s = c[kk, :].max(dim=1)
+                scores_classes.append(s)
 
-            nms_scores, nms_class = classification[0, anchors_nms_idx, :].max(dim=1)
+            scores, classes = zip(*scores_classes)
+            batched_transformed_anchors = []
 
-            return [nms_scores, nms_class, transformed_anchors[0, anchors_nms_idx, :]]
+            for i, ta in enumerate(transformed_anchors):
+                kk = batched_nms_idxs[i]
+                tmp = torch.ones((0, 4))*-1
+                if len(kk) > 0:
+                    tmp = ta[kk, :]
+                batched_transformed_anchors.append(tmp)
+
+            return [scores, classes, batched_transformed_anchors]
 
 
 class ResNetReduced(MetaModule):
@@ -430,6 +446,7 @@ def rresnet18(num_classes, pretrained=False, **kwargs):
     """
     model = ResNetReduced(num_classes, BasicBlock, [2, 2, 2, 2], **kwargs)
     return model
+
 
 def resnet18(num_classes, pretrained=False, **kwargs):
     """Constructs a ResNet-18 model.

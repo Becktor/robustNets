@@ -4,6 +4,8 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 
+from network.dataloader import Sample
+
 
 def compute_overlap(a, b):
     """
@@ -96,10 +98,7 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
     """
     dataset = []
     for index, data in enumerate(dataloader):
-        annotation = data['annot'].numpy()
-        img = data['img']
-        for i in range(img.shape[0]):
-            elem = {'annot': annotation[i], 'img': img[i]}
+        for elem in data:
             dataset.append(elem)
     ds = dataloader.dataset
     all_detections = [[None for i in range(ds.num_classes())] for j in range(len(dataset))]
@@ -108,8 +107,8 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
 
     with torch.no_grad():
         for index, data in enumerate(dataset):
-            annotation = data['annot']
-            img = data['img']
+            annotation = data.annot.numpy()
+            img = data.img.numpy()
 
             for label in range(ds.num_classes()):
                 all_annotations[index][label] = annotation[annotation[:, 4] == label, :4].copy()
