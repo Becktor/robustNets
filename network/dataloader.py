@@ -31,11 +31,12 @@ class Batch:
         annots = [s.annot for s in self._samples]
         names = [s.name for s in self._samples]
         idx = [s.index for s in self._samples]
+        crop_ids = [s.crop_id for s in self._samples]
 
         torch_img = to_var(torch.stack(imgs))
         torch_annots = to_var(torch.stack(annots))
 
-        return torch_img, torch_annots, names, idx
+        return torch_img, torch_annots, names, idx, crop_ids
 
     def __iter__(self):
         return self
@@ -56,13 +57,14 @@ class Batch:
 class Sample:
     """CSV sample"""
 
-    def __init__(self, img, annot, name, index, parent=None):
+    def __init__(self, img, annot, name, index, crop_id=-1, parent=None):
         self._img = img
         self._annot = annot
         self._name = name
         self._index = index
         self._parent = parent
         self._alt = False
+        self._crop_id = crop_id
 
     @property
     def img(self):
@@ -106,6 +108,14 @@ class Sample:
     @img.setter
     def alt(self, value):
         self._alt = value
+
+    @property
+    def crop_id(self):
+        return self._crop_id
+
+    @crop_id.setter
+    def crop_id(self, value):
+        self._crop_id = value
 
 
 class CSVDataset(Dataset):
@@ -607,11 +617,13 @@ class Crop(object):
         key = random.choice(keys)
         img = cropped_imgs[key][0]
         annotations = annots
+        crop_id=-1
         if len(sample_crops) > 0:
             keys = list(sample_crops.keys())
             key = random.choice(keys)
             img = cropped_imgs[key][0]
             annotations = np.array(sample_crops[key])
+            crop_id = key
             # if self.reweight:
             #     keys = []
             #     for k in sample_crops:
@@ -640,6 +652,7 @@ class Crop(object):
                 plt.imshow(tmp_img)
                 plt.show()
         sample.img = img
+        sample.crop_id = crop_id
         sample.annot = annotations
         sample.name = name
         return sample
@@ -747,6 +760,7 @@ class LabelFlip(object):
 
     def alt(self, key, value):
         self._alt[key] = value
+
 
 class Normalizer(object):
 

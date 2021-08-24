@@ -287,7 +287,7 @@ class ResNet(MetaModule):
             scores_classes = []
             for i, c in enumerate(classification):
                 kk = batched_nms_idxs[i]
-                s = (-1, -1)
+                s = ([-1], -1)
                 if len(kk) > 0:
                     s = c[kk, :].max(dim=1)
                 scores_classes.append(s)

@@ -169,7 +169,7 @@ def main(args=None):
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
         for iter_num, data in enumerate(dataloader_train):
-            image, labels, names, idxs = data.as_batch()
+            image, labels, names, idxs, crop_ids = data.as_batch()
 
             # update labels that are poor according to reweight mechanism.
             for x in range(len(labels)):
@@ -216,7 +216,7 @@ def main(args=None):
 
                 for weighted_data in dataloader_weight:
                     # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
-                    v_image, v_labels, w_names, idxs = weighted_data.as_batch()
+                    v_image, v_labels, w_names, idxs, _ = weighted_data.as_batch()
 
                     y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
                     l_g_meta = y_meta_classification_loss + y_meta_regression_loss
@@ -224,8 +224,8 @@ def main(args=None):
                     if l_g_meta == zero_tensor:
                         zero_loss += 1
                         continue
-                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[
-                        0]  # find gradients with regard to epsilon
+                    # find gradients with regard to epsilon
+                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]
 
                     # Line 11 computing and normalizing the weights
                     w_tilde = torch.clamp(-grad_eps.detach(), min=0)
@@ -252,20 +252,22 @@ def main(args=None):
                                     update_anno[index] = True
                             else:
                                 reweight_cases[names[index]] = (1, [float(weight)])
-                               # trans[0].alt(idxs[index], sample)
+                                # trans[0].alt(idxs[index], sample)
                                 update_anno[index] = True
 
-                    meta_model.training = False
+                    meta_model.eval()
                     if update_anno.sum() > 0:
                         update_img = image[update_anno]
                         update_names = np.array(idxs)[update_anno]
+                        update_crop_ids = np.array(crop_ids)[update_anno]
                         score, classes, bbox = meta_model(update_img)
                         for i in range(len(score)):
-                            if score[i] > 0:
+                            if score[i][0] != -1:
                                 c = classes[i]
                                 b = bbox[i]
                                 new_anno = torch.cat([b, c.reshape([-1, 1])], axis=1)
-                                altered_labels[update_names[i]] = new_anno
+                                key = "{}_{}".format(update_names[i], update_crop_ids[i])
+                                altered_labels[key] = new_anno
 
                     loss = torch.sum(cost * w)
                     break
@@ -317,23 +319,19 @@ def main(args=None):
 
             _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)
 
-            # Write to Tensorboard
-            wandb.log({"train/Epoch_runtime": runtime})
-            wandb.log({"train/running_loss": np.mean(loss_hist)})
-            wandb.log({"train/epoch_loss": np.mean(epoch_loss)})
-            wandb.log({"train/meta_epoch_loss": np.mean(m_epoch_loss)})
-
-            wandb.log({"val/Buoy_Recall": rl[0][1]})
-            wandb.log({"val/Buoy_Precision": rl[0][2]})
-
-            wandb.log({"val/Boat_Recall": rl[1][1]})
-            wandb.log({"val/Boat_Precision": rl[1][2]})
-
-            wandb.log({"mAP/AP_Buoy": rl[2][1]})
-            wandb.log({"mAP/AP_Boat": rl[3][1]})
-            wandb.log({"mAP/mAP": rl[4]})
-
-            wandb.log({"lr/Learning Rate": lr})
+            # Write to Wandb
+            wandb.log({"train/Epoch_runtime": runtime,
+                       "train/running_loss": np.mean(loss_hist),
+                       "train/epoch_loss": np.mean(epoch_loss),
+                       "train/meta_epoch_loss": np.mean(m_epoch_loss),
+                       "val/Buoy_Recall": rl[0][1],
+                       "val/Buoy_Precision": rl[0][2],
+                       "val/Boat_Recall": rl[1][1],
+                       "val/Boat_Precision": rl[1][2],
+                       "mAP/AP_Buoy": rl[2][1],
+                       "mAP/AP_Boat": rl[3][1],
+                       "mAP/mAP": rl[4],
+                       "lr/Learning Rate": lr})
 
             checkpoint = {
                 'epoch': curr_epoch + 1,
