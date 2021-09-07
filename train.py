@@ -29,7 +29,7 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=20)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=16)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -143,7 +143,9 @@ def main(args=None):
 
     print('Num training images: {} and num itr: {}'.format(len(dataset_train), n_iters))
 
-    zero_tensor = torch.tensor(0., device=torch.device('cuda'))
+    device = torch.device('cuda:0')
+
+    zero_tensor = torch.tensor(0., device=device)
     mAP = 0
     use_gpu = True
     if use_gpu:
@@ -172,9 +174,9 @@ def main(args=None):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
             # update labels that are poor according to reweight mechanism.
-            for x in range(len(labels)):
-                if labels[x] in altered_labels:
-                    labels[x] = altered_labels[labels[x]]
+            if len(altered_labels) > 0:
+                for x in range(len(labels)):
+                    labels[x]= altered_labels[labels[x]] if labels[x] in altered_labels else labels[x]
 
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
@@ -238,8 +240,8 @@ def main(args=None):
                         w = w_tilde
 
                     wl = torch.le(w, 0.005)
-                    update_anno = np.full(20, False)
-                    lookup_id = np.full(20, '')
+                    update_anno = np.full(parser.batch_size, False)
+                    lookup_id = np.full(parser.batch_size, '')
                     for index, weight in enumerate(w):
                         if wl[index]:
                             if names[index] in reweight_cases:
