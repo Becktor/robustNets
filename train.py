@@ -13,6 +13,7 @@ import wandb
 import time
 import copy
 import csv
+from tqdm import tqdm
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -29,7 +30,7 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=16)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=4)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
@@ -59,6 +60,7 @@ def main(args=None):
         })
     config = wandb.config
     wandb_name = wandb.run.name + "_" + wandb.run.id
+    print(parser.batch_size)
     """
     Data loaders
     """
@@ -170,13 +172,15 @@ def main(args=None):
         if curr_epoch > 0:
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
-        for iter_num, data in enumerate(dataloader_train):
+        for iter_num, data in tqdm(enumerate(dataloader_train)):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
             # update labels that are poor according to reweight mechanism.
             if len(altered_labels) > 0:
+                print(len(altered_labels))
                 for x in range(len(labels)):
-                    labels[x]= altered_labels[labels[x]] if labels[x] in altered_labels else labels[x]
+                    if labels[x] in altered_labels:
+                        labels[x] = altered_labels[labels[x]]
 
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
@@ -269,7 +273,7 @@ def main(args=None):
                                 b = bbox[i]
                                 new_anno = torch.cat([b, c.reshape([-1, 1])], axis=1)
                                 key = "{}_{}".format(update_names[i], update_crop_ids[i])
-                                altered_labels[key] = new_anno
+                                altered_labels[key] = new_anno.detach()
 
                     loss = torch.sum(cost * w)
                     break
