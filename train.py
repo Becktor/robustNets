@@ -83,14 +83,14 @@ def main(args=None):
                                     transform=transforms.Compose([Crop(reweight=True), Augmenter(), Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
-    dataloader_train = DataLoader(dataset_train, num_workers=3, collate_fn=collater,
+    dataloader_train = DataLoader(dataset_train, num_workers=1, collate_fn=collater,
                                   batch_sampler=sampler)
 
     if dataset_val is not None:
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
-        dataloader_val = DataLoader(dataset_val, num_workers=3, collate_fn=crop_collater, batch_sampler=sampler_val)
+        dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=crop_collater, batch_sampler=sampler_val)
 
-    dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=3, collate_fn=collater,
+    dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=1, collate_fn=collater,
                                    shuffle=True)
     pre_trained = False
     if parser.pre_trained:
@@ -172,16 +172,20 @@ def main(args=None):
         if curr_epoch > 0:
             lr = get_lr(optimizer)
             print('setting LR: {}'.format(lr))
-        for iter_num, data in tqdm(enumerate(dataloader_train)):
+        for iter_num, data in enumerate(dataloader_train):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
             # update labels that are poor according to reweight mechanism.
-            if len(altered_labels) > 0:
-                print(len(altered_labels))
-                for x in range(len(labels)):
-                    if labels[x] in altered_labels:
-                        labels[x] = altered_labels[labels[x]]
-
+            # if len(altered_labels) > 0:
+            #     print(len(altered_labels))
+            #     for x in range(len(labels)):
+            #         if labels[x] in altered_labels:
+            #             labels[x] = altered_labels[labels[x]]
+            for i, x in enumerate(idxs):
+                tst_key = "{}_{}".format(str(x), crop_ids[i])
+                if tst_key in altered_labels.keys():
+                    labels.data[i] = altered_labels[tst_key]
+                    
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
             loss = torch.mean(cost)

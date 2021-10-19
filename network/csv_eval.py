@@ -108,7 +108,7 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
     with torch.no_grad():
         for index, data in enumerate(dataset):
             annotation = data.annot.numpy()
-            img = data.img.numpy()
+            img = data.img
 
             for label in range(ds.num_classes()):
                 all_annotations[index][label] = annotation[annotation[:, 4] == label, :4].copy()
@@ -117,6 +117,8 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
 
             # run network
             scores, labels, boxes = model(img.cuda().float().unsqueeze(dim=0))
+            if not scores.shape[0] == 0:
+                print('not zero')
             scores = scores.cpu().numpy()
             labels = labels.cpu().numpy()
             boxes = boxes.cpu().numpy()
