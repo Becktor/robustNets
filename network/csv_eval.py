@@ -116,13 +116,18 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
             #   img = img + torch.empty(img.shape).normal_(mean=0, std=noise_level).numpy()
 
             # run network
-            scores, labels, boxes = model(img.cuda().float().unsqueeze(dim=0))
-            if not scores.shape[0] == 0:
-                print('not zero')
-            scores = scores.cpu().numpy()
-            labels = labels.cpu().numpy()
-            boxes = boxes.cpu().numpy()
-
+            try:
+                scores, labels, boxes = model(img.cuda().float().unsqueeze(dim=0))
+                if len(scores) <= 0:
+                    scores = scores.cpu().numpy()
+                    labels = labels.cpu().numpy()
+                    boxes = boxes.cpu().numpy()
+                else:
+                    scores = scores[0].cpu().numpy()
+                    labels = labels[0].cpu().numpy()
+                    boxes = boxes[0].cpu().numpy()
+            except Exception as e:
+                print(e)
             # correct boxes for image scale
             # boxes /= scale
             debug = False

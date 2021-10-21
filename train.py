@@ -13,6 +13,7 @@ import wandb
 import time
 import copy
 import csv
+from collections import deque
 from tqdm import tqdm
 
 assert torch.__version__.split('.')[0] == '1'
@@ -29,13 +30,13 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=500)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=4)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=16)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
-    parser.add_argument('--label_flip', help='ResNet base pre-trained or not', type=bool, default=True)
-    parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=2)
+    parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
+    parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
 
     parser = parser.parse_args(args)
 
@@ -49,7 +50,7 @@ def main(args=None):
         wandb.init(project="reweight", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 0,
+            "reweight": 200,
             "milestones": [10, 75, 100],
             "step_size": 50,
             "gamma": 0.1,
@@ -83,7 +84,7 @@ def main(args=None):
                                     transform=transforms.Compose([Crop(reweight=True), Augmenter(), Resizer()]))
 
     sampler = AspectRatioBasedSampler(dataset_train, batch_size=parser.batch_size, drop_last=True)
-    dataloader_train = DataLoader(dataset_train, num_workers=1, collate_fn=collater,
+    dataloader_train = DataLoader(dataset_train, num_workers=4, collate_fn=collater,
                                   batch_sampler=sampler)
 
     if dataset_val is not None:
@@ -118,14 +119,19 @@ def main(args=None):
     count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
-    n_iters = len(dataset_train) / parser.batch_size
+    # n_iters = len(dataset_train) / parser.batch_size
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
     #                                     gamma=config.gamma)
-    scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
-                                            step_size_up=n_iters, cycle_momentum=False)
+    # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
+    #                                         step_size_up=n_iters, cycle_momentum=False)
+
+    n_iters = len(dataset_train)
+    wr = 10
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
 
     prev_epoch = 0
     if parser.continue_training is None:
+        model, optimizer, scheduler, checkpoint_dict = load_ckp("base_model_path")
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
     else:
@@ -154,9 +160,10 @@ def main(args=None):
         model = model.cuda()
     model = model.cuda()
     torch.backends.cudnn.benchmark = True
-
+    queue = deque()
     reweight_cases = {}
     altered_labels = {}
+    dataset_len = len(dataloader_train)
     for epoch_num in range(parser.epochs):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
@@ -175,17 +182,12 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
-            # update labels that are poor according to reweight mechanism.
-            # if len(altered_labels) > 0:
-            #     print(len(altered_labels))
-            #     for x in range(len(labels)):
-            #         if labels[x] in altered_labels:
-            #             labels[x] = altered_labels[labels[x]]
-            for i, x in enumerate(idxs):
-                tst_key = "{}_{}".format(str(x), crop_ids[i])
-                if tst_key in altered_labels.keys():
-                    labels.data[i] = altered_labels[tst_key]
-                    
+            if curr_epoch >= config.reweight:
+                for i, x in enumerate(idxs):
+                    tst_key = "{}_{}".format(str(x), crop_ids[i])
+                    if tst_key in altered_labels.keys():
+                        labels.data[i] = altered_labels[tst_key]
+
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
             loss = torch.mean(cost)
@@ -236,48 +238,25 @@ def main(args=None):
                         continue
                     # find gradients with regard to epsilon
                     grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]
-
                     # Line 11 computing and normalizing the weights
                     w_tilde = torch.clamp(-grad_eps.detach(), min=0)
-
                     norm_c = torch.sum(w_tilde)
-
                     if norm_c != 0:
                         w = w_tilde / norm_c
                     else:
                         w = w_tilde
 
                     wl = torch.le(w, 0.005)
+                    ####
+                    ### meta annotation
+                    ####
                     update_anno = np.full(parser.batch_size, False)
-                    lookup_id = np.full(parser.batch_size, '')
-                    for index, weight in enumerate(w):
-                        if wl[index]:
-                            if names[index] in reweight_cases:
-                                tmp_cnt, tmp_loss = reweight_cases[names[index]]
-                                tmp_loss.append(float(weight))
-                                sample = (tmp_cnt + 1, tmp_loss)
-                                reweight_cases[names[index]] = sample
-                                if tmp_cnt > 0:  # arbitrarily chosen
-                                    trans[0].alt(idxs[index], sample)
-                                    update_anno[index] = True
-                            else:
-                                reweight_cases[names[index]] = (1, [float(weight)])
-                                # trans[0].alt(idxs[index], sample)
-                                update_anno[index] = True
+
+                    add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, trans, idxs, update_anno)
 
                     meta_model.eval()
                     if update_anno.sum() > 0:
-                        update_img = image[update_anno]
-                        update_names = np.array(idxs)[update_anno]
-                        update_crop_ids = np.array(crop_ids)[update_anno]
-                        score, classes, bbox = meta_model(update_img)
-                        for i in range(len(score)):
-                            if score[i][0] != -1:
-                                c = classes[i]
-                                b = bbox[i]
-                                new_anno = torch.cat([b, c.reshape([-1, 1])], axis=1)
-                                key = "{}_{}".format(update_names[i], update_crop_ids[i])
-                                altered_labels[key] = new_anno.detach()
+                        update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_labels)
 
                     loss = torch.sum(cost * w)
                     break
@@ -296,17 +275,21 @@ def main(args=None):
             loss_hist.append(float(loss))
             epoch_loss.append(float(loss))
             runtime = (time.time() - t0) / (1 + iter_num)
+
             if iter_num % 2 == 0:
                 lr = get_lr(optimizer)
                 if len(m_epoch_loss) == 0:
                     m_epoch_loss.append(0)
                 print(
                     'Itr: {} | Class loss: {:1.5f} | Reg loss: {:1.5f} | '
-                    'mel: {:1.5f} el: {:1.5f} | LR: {} | rt : {:1.3f} '.format(iter_num, float(classification_loss),
-                                                                               float(regression_loss),
-                                                                               np.mean(m_epoch_loss),
-                                                                               np.mean(epoch_loss), float(lr),
-                                                                               runtime), end='\r')
+                    'mel: {:1.5f} el: {:1.5f} | LR: {} | rt : {:1.3f} est rem: {:1.3f} '.format(iter_num, float(
+                        classification_loss),
+                                                                                                float(regression_loss),
+                                                                                                np.mean(m_epoch_loss),
+                                                                                                np.mean(epoch_loss),
+                                                                                                float(lr),
+                                                                                                runtime, (runtime * (
+                                    dataset_len - iter_num))), end='\r')
             del classification_loss
             del regression_loss
 
@@ -366,6 +349,37 @@ def main(args=None):
             loss_file.close()
     model.eval()
     torch.save(model, 'model_final.pt')
+
+
+def add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, trans, idxs, update_anno):
+    for index, weight in enumerate(w):
+        if wl[index]:
+            if names[index] in reweight_cases:
+                tmp_cnt, tmp_loss = reweight_cases[names[index]]
+                tmp_loss.append(float(weight))
+                sample = (tmp_cnt + 1, tmp_loss)
+                reweight_cases[names[index]] = sample
+                if tmp_cnt > 0:  # arbitrarily chosen
+                    trans[0].alt(idxs[index], sample)
+                    update_anno[index] = True
+            else:
+                reweight_cases[names[index]] = (1, [float(weight)])
+                # trans[0].alt(idxs[index], sample)
+                update_anno[index] = True
+
+
+def update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_labels):
+    update_img = image[update_anno]
+    update_names = np.array(idxs)[update_anno]
+    update_crop_ids = np.array(crop_ids)[update_anno]
+    score, classes, bbox = meta_model(update_img)
+    for i in range(len(score)):
+        if score[i][0] != -1:
+            c = classes[i]
+            b = bbox[i]
+            new_anno = torch.cat([b, c.reshape([-1, 1])], axis=1)
+            key = "{}_{}".format(update_names[i], update_crop_ids[i])
+            altered_labels[key] = new_anno.detach()
 
 
 if __name__ == '__main__':
