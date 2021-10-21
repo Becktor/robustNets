@@ -32,8 +32,13 @@ def load_ckp(checkpoint_filepath, model, optimizer=None, scheduler=None):
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint['optimizer'])
         scheduler.load_state_dict(checkpoint['scheduler'])
-    return model, optimizer, scheduler, checkpoint
+        return model, optimizer, scheduler, checkpoint
+    return model
 
+def load_base_model(path, model):
+    checkpoint = torch.load(path)
+    model.load_state_dict(checkpoint['state_dict'], strict=False)
+    return model
 
 def load_best_ckp(checkpoint_filepath, model, optimizer):
     cwd = os.path.join(os.getcwd(), checkpoint_filepath)

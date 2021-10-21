@@ -14,7 +14,6 @@ import time
 import copy
 import csv
 from collections import deque
-from tqdm import tqdm
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -125,13 +124,13 @@ def main(args=None):
     # scheduler = optim.lr_scheduler.CyclicLR(optimizer, base_lr=1e-5, max_lr=5e-5,
     #                                         step_size_up=n_iters, cycle_momentum=False)
 
-    n_iters = len(dataset_train) / parser.batch_size
+    n_iters = int(len(dataset_train) / parser.batch_size)
     wr = 10
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
 
     prev_epoch = 0
     if parser.continue_training is None:
-        model, optimizer, scheduler, checkpoint_dict = load_ckp("/work1/jbibe/base_models/base_model_resnet_50.pt")
+        model = load_base_model("/work1/jbibe/base_models/base_model_resnet_50.pt", model)
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
     else:
