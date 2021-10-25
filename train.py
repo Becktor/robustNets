@@ -30,9 +30,10 @@ def main(args=None):
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
     parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
-    parser.add_argument('--batch_size', help='Batch size', type=int, default=16)
+    parser.add_argument('--batch_size', help='Batch size', type=int, default=8)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
+    parser.add_argument('--base_model', help='Path base model ', type=str, default=None)
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
     parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
     parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
@@ -44,14 +45,12 @@ def main(args=None):
     reweight_mod = reweight_mods[parser.flip_mod]
     if parser.continue_training is not None:
         id = parser.continue_training[-8:]
-        wandb.init(project="reweight", id=id, resume=True)
+        wandb.init(project="reanno", id=id, resume=True)
     else:
-        wandb.init(project="reweight", config={
+        wandb.init(project="reanno", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 200,
-            "milestones": [10, 75, 100],
-            "step_size": 50,
+            "reweight": 0,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
@@ -129,16 +128,16 @@ def main(args=None):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
 
     prev_epoch = 0
-    if parser.continue_training is None:
-        model = load_base_model("/work1/jbibe/base_models/base_model_resnet_50.pt", model)
-        if not os.path.exists(checkpoint_dir):
-            os.makedirs(checkpoint_dir)
-    else:
+    if parser.continue_training is not None:
         model, optimizer, scheduler, checkpoint_dict = load_ckp(parser.continue_training, model, optimizer, scheduler)
         checkpoint_dir = parser.continue_training
         prev_epoch = checkpoint_dict['epoch']
-
         # mAP = checkpoint_dict['mAP']
+    elif parser.base_model is not None:
+        model = load_base_model(parser.base_model, model)
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
     wandb.watch(model)
     # scheduler.last_epoch = prev_epoch
     loss_hist = collections.deque(maxlen=500)
@@ -159,7 +158,7 @@ def main(args=None):
         model = model.cuda()
     model = model.cuda()
     torch.backends.cudnn.benchmark = True
-    queue = deque()
+
     reweight_cases = {}
     altered_labels = {}
     dataset_len = len(dataloader_train)
@@ -167,7 +166,7 @@ def main(args=None):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
         model.train()
-        model.freeze_bn()
+        #model.freeze_bn()
         epoch_loss = []
         m_epoch_loss = []
         print('============= Starting Epoch {} ============\n'.format(curr_epoch))
@@ -193,75 +192,11 @@ def main(args=None):
             if loss == zero_tensor:
                 zero_loss += 1
                 continue
+
             if curr_epoch >= config.reweight:
-                # Line 2 get batch of data
-                # initialize a dummy network for the meta learning of the weights
-                # Setup meta net
-                meta_model = retinanet.resnet50(num_classes=dataset_train.num_classes())
-                meta_model.load_state_dict(model.state_dict())
-                if torch.cuda.is_available():
-                    meta_model.cuda()
-
-                # Lines 4 - 5 initial forward pass to compute the initial weighted loss
-
-                _, _, meta_cl = meta_model([image, labels])
-                meta_joined_cost = meta_cl[0] + meta_cl[1]
-                # Get loss and apply epsilon.
-                eps = to_var(torch.zeros(parser.batch_size))
-                l_f_meta = torch.sum(meta_joined_cost * eps)
-                meta_model.zero_grad(set_to_none=True)
-
-                # Get original gradients with epsilon applied.
-                grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
-                if any(x is None for x in grads):
-                    skipped_iters += 1
-                    continue
-
-                # gp = zip(meta_model.parameters(), grads)
-                # for p, g in gp:
-                #     new_val = p - lr * g
-                #     p.data = new_val
-
-                # Perform a parameter update
-                meta_model.update_params(lr, source_params=grads)
-
-                for weighted_data in dataloader_weight:
-                    # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
-                    v_image, v_labels, w_names, idxs, _ = weighted_data.as_batch()
-
-                    y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
-                    l_g_meta = y_meta_classification_loss + y_meta_regression_loss
-                    m_epoch_loss.append(float(l_g_meta))
-                    if l_g_meta == zero_tensor:
-                        zero_loss += 1
-                        continue
-                    # find gradients with regard to epsilon
-                    grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]
-                    # Line 11 computing and normalizing the weights
-                    w_tilde = torch.clamp(-grad_eps.detach(), min=0)
-                    norm_c = torch.sum(w_tilde)
-                    if norm_c != 0:
-                        w = w_tilde / norm_c
-                    else:
-                        w = w_tilde
-
-                    wl = torch.le(w, 0.005)
-                    ####
-                    ### meta annotation
-                    ####
-                    update_anno = np.full(parser.batch_size, False)
-
-                    add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, trans, idxs, update_anno)
-
-                    meta_model.eval()
-                    if update_anno.sum() > 0:
-                        update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_labels)
-
-                    loss = torch.sum(cost * w)
-                    break
-
-                if loss == zero_tensor:
-                    zero_loss += 1
+                reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
+                              lr, dataloader_weight, m_epoch_loss, zero_tensor,
+                              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
 
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
@@ -288,7 +223,7 @@ def main(args=None):
                                                                                                 np.mean(epoch_loss),
                                                                                                 float(lr),
                                                                                                 runtime, (runtime * (
-                                    dataset_len - iter_num))), end='\r')
+                                dataset_len - iter_num))), end='\r')
             del classification_loss
             del regression_loss
 
@@ -348,6 +283,79 @@ def main(args=None):
             loss_file.close()
     model.eval()
     torch.save(model, 'model_final.pt')
+
+
+def reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
+                  lr, dataloader_weight, m_epoch_loss, zero_tensor,
+                  zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost):
+    # Line 2 get batch of data
+    # initialize a dummy network for the meta learning of the weights
+    # Setup meta net
+    meta_model = retinanet.resnet50(num_classes=dataset_train.num_classes())
+    meta_model.load_state_dict(model.state_dict())
+    if torch.cuda.is_available():
+        meta_model.cuda()
+
+    # Lines 4 - 5 initial forward pass to compute the initial weighted loss
+
+    _, _, meta_cl = meta_model([image, labels])
+    meta_joined_cost = meta_cl[0] + meta_cl[1]
+    # Get loss and apply epsilon.
+    eps = to_var(torch.zeros(parser.batch_size))
+    l_f_meta = torch.sum(meta_joined_cost * eps)
+    meta_model.zero_grad(set_to_none=True)
+
+    # Get original gradients with epsilon applied.
+    grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
+    if any(x is None for x in grads):
+        skipped_iters += 1
+        return
+
+    # gp = zip(meta_model.parameters(), grads)
+    # for p, g in gp:
+    #     new_val = p - lr * g
+    #     p.data = new_val
+
+    # Perform a parameter update
+    meta_model.update_params(lr, source_params=grads)
+
+    for weighted_data in dataloader_weight:
+        # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
+        v_image, v_labels, w_names, idxs, _ = weighted_data.as_batch()
+
+        y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
+        l_g_meta = y_meta_classification_loss + y_meta_regression_loss
+        m_epoch_loss.append(float(l_g_meta))
+        if l_g_meta == zero_tensor:
+            zero_loss += 1
+            continue
+        # find gradients with regard to epsilon
+        grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]
+        # Line 11 computing and normalizing the weights
+        w_tilde = torch.clamp(-grad_eps.detach(), min=0)
+        norm_c = torch.sum(w_tilde)
+        if norm_c != 0:
+            w = w_tilde / norm_c
+        else:
+            w = w_tilde
+
+        wl = torch.le(w, 0.005)
+        ####
+        ### meta annotation
+        ####
+        update_anno = np.full(parser.batch_size, False)
+
+        add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, trans, idxs, update_anno)
+
+        meta_model.eval()
+        if update_anno.sum() > 0:
+            update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_labels)
+
+        loss = torch.sum(cost * w)
+        break
+
+    if loss == zero_tensor:
+        zero_loss += 1
 
 
 def add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, trans, idxs, update_anno):

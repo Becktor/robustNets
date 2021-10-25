@@ -35,10 +35,12 @@ def load_ckp(checkpoint_filepath, model, optimizer=None, scheduler=None):
         return model, optimizer, scheduler, checkpoint
     return model
 
+
 def load_base_model(path, model):
     checkpoint = torch.load(path)
     model.load_state_dict(checkpoint['state_dict'], strict=False)
     return model
+
 
 def load_best_ckp(checkpoint_filepath, model, optimizer):
     cwd = os.path.join(os.getcwd(), checkpoint_filepath)
@@ -89,7 +91,7 @@ def plot_input(v_image, v_labels, w_names, title="input"):
             img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
                                  (int(v[2]), int(v[3])), color=color, thickness=2)
         plt.imshow(img2)
-        plt.title(title+"-> Bouy is blue, boat is green indx: " + str(i))
+        plt.title(title + "-> Bouy is blue, boat is green indx: " + str(i))
         plt.show()
 
 
@@ -97,7 +99,7 @@ def plot_sample(img, lbl, title="input"):
     img = img.cpu().detach().numpy().transpose([1, 2, 0])
     val = lbl.cpu().detach().numpy()
     img2 = img.copy()
-    for x,v in enumerate(val):
+    for x, v in enumerate(val):
         color = (0, 1, 0)
         if v[4] == 0:
             color = (0, 0, 1)
@@ -105,5 +107,5 @@ def plot_sample(img, lbl, title="input"):
         img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
                              (int(v[2]), int(v[3])), color=color, thickness=2)
     plt.imshow(img2)
-    plt.title(title+"-> Bouy is blue, boat is green")
+    plt.title(title + "-> Bouy is blue, boat is green")
     plt.show()
