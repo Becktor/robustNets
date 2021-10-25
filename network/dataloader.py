@@ -323,6 +323,7 @@ def collater(data):
     annots = [s.annot for s in data]
     names = [s.name for s in data]
     index = [s.index for s in data]
+    crop_ids = [s.crop_id for s in data]
 
     widths = [int(s.shape[0]) for s in imgs]
     heights = [int(s.shape[1]) for s in imgs]
@@ -355,7 +356,7 @@ def collater(data):
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
     collated_samples = []
     for i, img in enumerate(padded_imgs):
-        collated_samples.append(Sample(img, annot_padded[i], names[i], index[i]))
+        collated_samples.append(Sample(img, annot_padded[i], names[i], index[i], crop_ids[i]))
 
     batch = Batch(collated_samples)
     return batch
@@ -619,7 +620,8 @@ class Crop(object):
         key = random.choice(keys)
         img = cropped_imgs[key][0]
         annotations = annots
-        crop_id=-1
+        crop_id = -1
+        ## if any labels exists select one and save crop id.
         if len(sample_crops) > 0:
             keys = list(sample_crops.keys())
             key = random.choice(keys)
