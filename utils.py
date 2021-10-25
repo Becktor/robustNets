@@ -20,7 +20,7 @@ def save_ckp(state, model, is_best, checkpoint_dir, epoch):
     f_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
     torch.save(state, f_path)
     if is_best:
-        best_filepath = os.path.join(checkpoint_dir, 'best_model_{}.pt'.format(epoch))
+        best_filepath = os.path.join(checkpoint_dir, 'best_modelpt')
         torch.save(state, best_filepath)
 
 

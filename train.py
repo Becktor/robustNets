@@ -50,7 +50,7 @@ def main(args=None):
         wandb.init(project="reanno", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 0,
+            "reweight": 200,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
