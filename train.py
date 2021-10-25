@@ -197,7 +197,7 @@ def main(args=None):
                 # Line 2 get batch of data
                 # initialize a dummy network for the meta learning of the weights
                 # Setup meta net
-                meta_model = retinanet.resnet18(num_classes=dataset_train.num_classes())
+                meta_model = retinanet.resnet50(num_classes=dataset_train.num_classes())
                 meta_model.load_state_dict(model.state_dict())
                 if torch.cuda.is_available():
                     meta_model.cuda()
