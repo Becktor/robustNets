@@ -50,7 +50,7 @@ def main(args=None):
         wandb.init(project="reanno", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 200,
+            "reweight": 0,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
@@ -166,7 +166,7 @@ def main(args=None):
         t0 = time.time()
         curr_epoch = prev_epoch + epoch_num
         model.train()
-        #model.freeze_bn()
+        # model.freeze_bn()
         epoch_loss = []
         m_epoch_loss = []
         print('============= Starting Epoch {} ============\n'.format(curr_epoch))
@@ -184,7 +184,16 @@ def main(args=None):
                 for i, x in enumerate(idxs):
                     tst_key = "{}_{}".format(str(x), crop_ids[i])
                     if tst_key in altered_labels.keys():
-                        labels.data[i] = altered_labels[tst_key]
+                        alt = altered_labels[tst_key].shape
+                        lbs = labels.data.shape
+                        if alt[0] > lbs[1]:
+                            temp = torch.ones([parser.batch_size, alt.shape[0], alt.shape[1]]) * -1
+                            temp[:, 0:1, :] = labels.data
+                            labels.data = temp
+                        elif alt[0] > lbs[1]:
+                            labels.data[i][0:alt[0], :] = altered_labels[tst_key]
+                        else:
+                            labels.data[i] = altered_labels[tst_key]
 
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
