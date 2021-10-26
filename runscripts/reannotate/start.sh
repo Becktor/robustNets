@@ -30,4 +30,4 @@
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/datasets/dataset_csvs/reannotation_set_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/datasets/dataset_csvs/reannotation_valset_hpc.csv --csv_weight /work1/jbibe/datasets/dataset_csvs/weightset_hpc.csv --batch_size=16 --depth=50 --flip_mod 4 --base_model /work1/jbibe/base_models/base_model_resnet_50.pt
+python train.py --csv_train /work1/jbibe/datasets/dataset_csvs/reannotation_set_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/datasets/dataset_csvs/reannotation_valset_hpc.csv --csv_weight /work1/jbibe/datasets/dataset_csvs/weightset_hpc.csv --batch_size=16 --depth=50 --base_model /work1/jbibe/base_models/base_model_resnet_50.pt
