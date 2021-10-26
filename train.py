@@ -41,6 +41,7 @@ def main(args=None):
     parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
     parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
     parser.add_argument('--rew_start', help='reweight starting point', type=int, default=0)
+    parser.add_argument('--reannotate', help='reannotate samples', type=bool, default=False)
 
     parser = parser.parse_args(args)
 
@@ -198,7 +199,7 @@ def main(args=None):
             if curr_epoch >= config.reweight:
                 for i, x in enumerate(idxs):
                     tst_key = "{}_{}".format(str(x), crop_ids[i])
-                    if tst_key in altered_labels.keys():
+                    if tst_key in altered_labels.keys() and parser.reannotate:
                         alt = altered_labels[tst_key].shape
                         lbs = labels.data.shape
                         if alt[0] > lbs[1]:
