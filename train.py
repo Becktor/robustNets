@@ -202,13 +202,13 @@ def main(args=None):
                         alt = altered_labels[tst_key].shape
                         lbs = labels.data.shape
                         if alt[0] > lbs[1]:
-                            temp = torch.ones([parser.batch_size, alt.shape[0], alt.shape[1]]) * -1
+                            temp = torch.ones([parser.batch_size, alt[0], alt[1]]) * -1
                             temp[:, 0:1, :] = labels.data
-                            labels.data = temp
+                            labels.data = temp.cuda()
                         elif alt[0] > lbs[1]:
-                            labels.data[i][0:alt[0], :] = altered_labels[tst_key]
+                            labels.data[i][0:alt[0], :] = altered_labels[tst_key].cuda()
                         else:
-                            labels.data[i] = altered_labels[tst_key]
+                            labels.data[i] = altered_labels[tst_key].cuda()
 
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
