@@ -17,6 +17,8 @@ def natural_keys(text):
 
 
 def save_ckp(state, model, is_best, checkpoint_dir, epoch):
+    if not os.path.exists(checkpoint_dir):
+        os.mkdir(checkpoint_dir)
     f_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
     torch.save(state, f_path)
     if is_best:

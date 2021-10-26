@@ -37,6 +37,7 @@ def main(args=None):
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
     parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
     parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
+    parser.add_argument('--rew_start', help='reweight starting point', type=int, default=0)
 
     parser = parser.parse_args(args)
 
@@ -50,7 +51,7 @@ def main(args=None):
         wandb.init(project="reanno", config={
             "learning_rate": 1e-4,
             "ResNet": parser.depth,
-            "reweight": 0,
+            "reweight": parser.rew_start,
             "gamma": 0.1,
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
@@ -135,6 +136,9 @@ def main(args=None):
         # mAP = checkpoint_dict['mAP']
     elif parser.base_model is not None:
         model = load_base_model(parser.base_model, model)
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+    else:
         if not os.path.exists(checkpoint_dir):
             os.makedirs(checkpoint_dir)
 
