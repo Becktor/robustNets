@@ -1,10 +1,12 @@
 import argparse
 import collections
 import datetime as dt
+import random
+
 import numpy as np
 import torch.optim as optim
 from torchvision import transforms
-from network import retinanet, csv_eval
+from network import retinanet, csv_eval, retinanet_normal
 from network.dataloader import CSVDataset, collater, Resizer, AspectRatioBasedSampler, Augmenter, Crop, \
     crop_collater, LabelFlip
 from torch.utils.data import DataLoader
@@ -13,6 +15,7 @@ import wandb
 import time
 import copy
 import csv
+import higher
 from collections import deque
 
 assert torch.__version__.split('.')[0] == '1'
@@ -60,7 +63,7 @@ def main(args=None):
         })
     config = wandb.config
     wandb_name = wandb.run.name + "_" + wandb.run.id
-    print(parser.batch_size)
+
     """
     Data loaders
     """
@@ -90,8 +93,16 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
         dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=crop_collater, batch_sampler=sampler_val)
 
-    dataloader_weight = DataLoader(dataset_weight, batch_size=parser.batch_size, num_workers=1, collate_fn=collater,
-                                   shuffle=True)
+    dataloader_weight = DataLoader(dataset_weight, batch_size=1,
+                                   num_workers=1, collate_fn=collater)
+    weighted_dataset_in_mem = []
+
+    for weighted_data in dataloader_weight:
+        v_image, v_labels, w_names, idxs, _ = weighted_data.as_batch()
+        tmp = torch.ones((1, 8, 5)) * -1
+        tmp[:, 0:v_labels.shape[1], :] = v_labels
+        weighted_dataset_in_mem.append((v_image, tmp.cuda(), w_names, idxs))
+
     pre_trained = False
     if parser.pre_trained:
         pre_trained = True
@@ -103,7 +114,7 @@ def main(args=None):
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
-        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet_normal.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -116,7 +127,7 @@ def main(args=None):
     checkpoint_dir = os.path.join('trained_models', wandb_name)
 
     count_parameters(model)
-    optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
 
     # n_iters = len(dataset_train) / parser.batch_size
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
@@ -162,7 +173,7 @@ def main(args=None):
         model = model.cuda()
     model = model.cuda()
     torch.backends.cudnn.benchmark = True
-
+    torch.set_grad_enabled(True)
     reweight_cases = {}
     altered_labels = {}
     dataset_len = len(dataloader_train)
@@ -207,9 +218,12 @@ def main(args=None):
                 continue
 
             if curr_epoch >= config.reweight:
-                reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
-                              lr, dataloader_weight, m_epoch_loss, zero_tensor,
+                val_samples = random.sample(weighted_dataset_in_mem, parser.batch_size)
+                reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                               zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
+                # reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
+                #               lr, dataloader_weight, m_epoch_loss, zero_tensor,
+                #               zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
 
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
@@ -298,54 +312,28 @@ def main(args=None):
     torch.save(model, 'model_final.pt')
 
 
-def reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
-                  lr, dataloader_weight, m_epoch_loss, zero_tensor,
+def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_loss, zero_tensor,
                   zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost):
-    # Line 2 get batch of data
-    # initialize a dummy network for the meta learning of the weights
-    # Setup meta net
-    meta_model = retinanet.resnet50(num_classes=dataset_train.num_classes())
-    meta_model.load_state_dict(model.state_dict())
-    if torch.cuda.is_available():
-        meta_model.cuda()
+    with higher.innerloop_ctx(model, optimizer) as (meta_model, meta_opt):
+        # y_f_hat = meta_net(image)
+        _, _, meta_cl = meta_model([image, labels])
+        meta_cost = meta_cl[0] + meta_cl[1]
+        eps = torch.zeros(meta_cost.size()).cuda()
+        eps = eps.requires_grad_()
 
-    # Lines 4 - 5 initial forward pass to compute the initial weighted loss
-
-    _, _, meta_cl = meta_model([image, labels])
-    meta_joined_cost = meta_cl[0] + meta_cl[1]
-    # Get loss and apply epsilon.
-    eps = to_var(torch.zeros(parser.batch_size))
-    l_f_meta = torch.sum(meta_joined_cost * eps)
-    meta_model.zero_grad(set_to_none=True)
-
-    # Get original gradients with epsilon applied.
-    grads = torch.autograd.grad(l_f_meta, (meta_model.params()), create_graph=True, allow_unused=True)
-    if any(x is None for x in grads):
-        skipped_iters += 1
-        return
-
-    # gp = zip(meta_model.parameters(), grads)
-    # for p, g in gp:
-    #     new_val = p - lr * g
-    #     p.data = new_val
-
-    # Perform a parameter update
-    meta_model.update_params(lr, source_params=grads)
-
-    for weighted_data in dataloader_weight:
-        # Line 8 - 10 2nd forward pass and getting the gradients with respect to epsilon
-        v_image, v_labels, w_names, idxs, _ = weighted_data.as_batch()
-
-        y_meta_classification_loss, y_meta_regression_loss, _ = meta_model([v_image, v_labels])
-        l_g_meta = y_meta_classification_loss + y_meta_regression_loss
+        l_f_meta = torch.sum(meta_cost * eps)
+        meta_opt.step(l_f_meta)
+        v_image = torch.cat([x[0] for x in val_sample], 0)
+        v_labels = torch.cat([x[1] for x in val_sample], 0)
+        w_names = [x[2][0] for x in val_sample]
+        idxs = [x[3][0] for x in val_sample]
+        # v_image, v_labels, w_names, idxs, _ = val_sample
+        g_meta_classification_loss, g_meta_regression_loss, _ = meta_model([v_image, v_labels])
+        l_g_meta = g_meta_classification_loss + g_meta_regression_loss
         m_epoch_loss.append(float(l_g_meta))
-        if l_g_meta == zero_tensor:
-            zero_loss += 1
-            continue
-        # find gradients with regard to epsilon
-        grad_eps = torch.autograd.grad(l_g_meta, eps, only_inputs=True)[0]
+        grad_eps = torch.autograd.grad(l_g_meta, eps)[0].detach()
         # Line 11 computing and normalizing the weights
-        w_tilde = torch.clamp(-grad_eps.detach(), min=0)
+        w_tilde = torch.clamp(-grad_eps, min=0)
         norm_c = torch.sum(w_tilde)
         if norm_c != 0:
             w = w_tilde / norm_c
@@ -363,10 +351,7 @@ def reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
         meta_model.eval()
         if update_anno.sum() > 0:
             update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_labels)
-
         loss = torch.sum(cost * w)
-        break
-
     if loss == zero_tensor:
         zero_loss += 1
 
@@ -400,6 +385,17 @@ def update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_la
             new_anno = torch.cat([b, c.reshape([-1, 1])], axis=1)
             key = "{}_{}".format(update_names[i], update_crop_ids[i])
             altered_labels[key] = new_anno.detach()
+
+
+def update_params(model, lr_inner, source_params=None):
+    named_params = model.named_parameters()
+    if source_params is not None:
+        for tgt, src in zip(named_params, source_params):
+            name_t, param_t = tgt
+            grad = src
+            tmp = param_t - lr_inner * grad
+            vtmp = to_var(tmp)
+            param_t.data = vtmp
 
 
 if __name__ == '__main__':
