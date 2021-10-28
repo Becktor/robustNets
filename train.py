@@ -150,7 +150,7 @@ def main(args=None):
 
     n_iters = int(len(dataset_train) / parser.batch_size)
     wr = 10
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 3)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
 
     prev_epoch = 0
     if parser.continue_training is not None:
@@ -217,7 +217,7 @@ def main(args=None):
                             lbs = labels.data.shape
                             if alt[0] > lbs[1]:
                                 temp = torch.ones([parser.batch_size, alt[0], alt[1]]) * -1
-                                temp[:, 0:1, :] = labels.data
+                                temp[:, 0:lbls[1], :] = labels.data
                                 labels.data = temp.cuda()
                             elif alt[0] < lbs[1]:
                                 labels.data[i][0:alt[0], :] = altered_labels[tst_key].cuda()
