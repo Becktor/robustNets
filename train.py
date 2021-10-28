@@ -17,6 +17,7 @@ import copy
 import csv
 import higher
 from collections import deque
+from tqdm import tqdm
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -32,7 +33,7 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=180)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=8)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
@@ -41,7 +42,7 @@ def main(args=None):
     parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
     parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
     parser.add_argument('--rew_start', help='reweight starting point', type=int, default=0)
-    parser.add_argument('--reannotate', help='reannotate samples', type=bool, default=False)
+    parser.add_argument('--reannotate', help='reannotate samples', type=bool, default=True)
 
     parser = parser.parse_args(args)
 
@@ -94,15 +95,26 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
         dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=crop_collater, batch_sampler=sampler_val)
 
-    dataloader_weight = DataLoader(dataset_weight, batch_size=1,
-                                   num_workers=1, collate_fn=collater)
-    weighted_dataset_in_mem = []
+    dataloader_weight = DataLoader(dataset_weight, batch_size=8,
+                                   num_workers=4, collate_fn=collater)
+    weighted_dataset_in_mem = {}
+    temp = []
+    max_shape = -1
+    for _ in tqdm(range(20)):
+        for weighted_data in dataloader_weight:
+            v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
+            max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape
+            temp.append((v_image, v_labels, w_names, idx))
 
-    for weighted_data in dataloader_weight:
-        v_image, v_labels, w_names, idxs, _ = weighted_data.as_batch()
-        tmp = torch.ones((1, 8, 5)) * -1
-        tmp[:, 0:v_labels.shape[1], :] = v_labels
-        weighted_dataset_in_mem.append((v_image, tmp.cuda(), w_names, idxs))
+    for weighted_data in temp:
+        v_image, v_labels, w_names, idx = weighted_data
+        for x in range(v_image.shape[0]):
+            tmp = torch.ones((max_shape, 5)) * -1
+            tmp[0:v_labels[x].shape[0], :] = v_labels[x]
+            if idx[x] in weighted_dataset_in_mem:
+                weighted_dataset_in_mem[idx[x]].append((v_image[x], tmp.cuda(), w_names[x], idx[x]))
+            else:
+                weighted_dataset_in_mem[idx[x]] = [(v_image[x], tmp.cuda(), w_names[x], idx[x])]
 
     pre_trained = False
     if parser.pre_trained:
@@ -128,7 +140,7 @@ def main(args=None):
     checkpoint_dir = os.path.join('trained_models', wandb_name)
 
     count_parameters(model)
-    optimizer = optim.Adam(model.parameters(), lr=config.learning_rate)
+    optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
 
     # n_iters = len(dataset_train) / parser.batch_size
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
@@ -138,7 +150,7 @@ def main(args=None):
 
     n_iters = int(len(dataset_train) / parser.batch_size)
     wr = 10
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 3)
 
     prev_epoch = 0
     if parser.continue_training is not None:
@@ -197,19 +209,20 @@ def main(args=None):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
             if curr_epoch >= config.reweight:
-                for i, x in enumerate(idxs):
-                    tst_key = "{}_{}".format(str(x), crop_ids[i])
-                    if tst_key in altered_labels.keys() and parser.reannotate:
-                        alt = altered_labels[tst_key].shape
-                        lbs = labels.data.shape
-                        if alt[0] > lbs[1]:
-                            temp = torch.ones([parser.batch_size, alt[0], alt[1]]) * -1
-                            temp[:, 0:1, :] = labels.data
-                            labels.data = temp.cuda()
-                        elif alt[0] > lbs[1]:
-                            labels.data[i][0:alt[0], :] = altered_labels[tst_key].cuda()
-                        else:
-                            labels.data[i] = altered_labels[tst_key].cuda()
+                if parser.reannotate:
+                    for i, x in enumerate(idxs):
+                        tst_key = "{}_{}".format(str(x), crop_ids[i])
+                        if tst_key in altered_labels.keys():
+                            alt = altered_labels[tst_key].shape
+                            lbs = labels.data.shape
+                            if alt[0] > lbs[1]:
+                                temp = torch.ones([parser.batch_size, alt[0], alt[1]]) * -1
+                                temp[:, 0:1, :] = labels.data
+                                labels.data = temp.cuda()
+                            elif alt[0] < lbs[1]:
+                                labels.data[i][0:alt[0], :] = altered_labels[tst_key].cuda()
+                            else:
+                                labels.data[i] = altered_labels[tst_key].cuda()
 
             classification_loss, regression_loss, cl = model([image, labels])
             cost = cl[0] + cl[1]
@@ -219,7 +232,8 @@ def main(args=None):
                 continue
 
             if curr_epoch >= config.reweight:
-                val_samples = random.sample(weighted_dataset_in_mem, parser.batch_size)
+                val_samples = get_random_weighting_sample(weighted_dataset_in_mem,
+                                                          parser.batch_size)  # random.sample(weighted_dataset_in_mem, parser.batch_size)
                 reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                               zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
                 # reweight_loop(dataset_train, model, image, labels, parser, skipped_iters,
@@ -313,8 +327,25 @@ def main(args=None):
     torch.save(model, 'model_final.pt')
 
 
+def get_random_weighting_sample(weight_samples_dict, batch_size):
+    val_samples = random.sample(weight_samples_dict.keys(), batch_size)
+    tmp_samples = []
+    v, l, n, i = [],[],[],[]
+    for x in val_samples:
+        sample = random.sample(weight_samples_dict[x], 1)
+        v.append(sample[0][0])
+        l.append(sample[0][1])
+        n.append(sample[0][2])
+        i.append(sample[0][3])
+    v = torch.stack(v)
+    l = torch.stack(l)
+    ret_samples = (v, l, n, i)
+    return ret_samples
+
+
 def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_loss, zero_tensor,
                   zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost):
+
     with higher.innerloop_ctx(model, optimizer) as (meta_model, meta_opt):
         # y_f_hat = meta_net(image)
         _, _, meta_cl = meta_model([image, labels])
@@ -323,12 +354,11 @@ def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_l
         eps = eps.requires_grad_()
 
         l_f_meta = torch.sum(meta_cost * eps)
+
         meta_opt.step(l_f_meta)
-        v_image = torch.cat([x[0] for x in val_sample], 0)
-        v_labels = torch.cat([x[1] for x in val_sample], 0)
-        w_names = [x[2][0] for x in val_sample]
-        idxs = [x[3][0] for x in val_sample]
-        # v_image, v_labels, w_names, idxs, _ = val_sample
+
+        # reshuffle samples
+        v_image, v_labels, w_names, idxs = val_sample
         g_meta_classification_loss, g_meta_regression_loss, _ = meta_model([v_image, v_labels])
         l_g_meta = g_meta_classification_loss + g_meta_regression_loss
         m_epoch_loss.append(float(l_g_meta))
