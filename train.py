@@ -217,7 +217,7 @@ def main(args=None):
                             lbs = labels.data.shape
                             if alt[0] > lbs[1]:
                                 temp = torch.ones([parser.batch_size, alt[0], alt[1]]) * -1
-                                temp[:, 0:lbls[1], :] = labels.data
+                                temp[:, 0:lbs[1], :] = labels.data
                                 labels.data = temp.cuda()
                             elif alt[0] < lbs[1]:
                                 labels.data[i][0:alt[0], :] = altered_labels[tst_key].cuda()
