@@ -42,7 +42,7 @@ def main(args=None):
     parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
     parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
     parser.add_argument('--rew_start', help='reweight starting point', type=int, default=0)
-    parser.add_argument('--reannotate', help='reannotate samples', type=bool, default=True)
+    parser.add_argument('--reannotate', help='reannotate samples', type=bool, default=False)
 
     parser = parser.parse_args(args)
 
@@ -100,7 +100,7 @@ def main(args=None):
     weighted_dataset_in_mem = {}
     temp = []
     max_shape = -1
-    for _ in tqdm(range(20)):
+    for _ in tqdm(range(100)):
         for weighted_data in dataloader_weight:
             v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
             max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape
