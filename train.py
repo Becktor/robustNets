@@ -208,6 +208,9 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
+            if curr_epoch == (wr-1):
+                scheduler.base_lrs[0] = scheduler.base_lrs[0] * 0.5
+
             if curr_epoch >= config.reweight:
                 if parser.reannotate:
                     for i, x in enumerate(idxs):
