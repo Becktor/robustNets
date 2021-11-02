@@ -1,9 +1,7 @@
 import argparse
 import collections
-import datetime as dt
 import random
 
-import numpy as np
 import torch.optim as optim
 from torchvision import transforms
 from network import retinanet, csv_eval, retinanet_normal
@@ -13,10 +11,8 @@ from torch.utils.data import DataLoader
 from utils import *
 import wandb
 import time
-import copy
 import csv
 import higher
-from collections import deque
 from tqdm import tqdm
 
 assert torch.__version__.split('.')[0] == '1'
@@ -54,7 +50,7 @@ def main(args=None):
         wandb.init(project="reanno", id=id, resume=True)
     else:
         wandb.init(project="reanno", config={
-            "learning_rate": 1e-4,
+            "learning_rate": 5e-5,
             "ResNet": parser.depth,
             "reweight": parser.rew_start,
             "gamma": 0.1,
@@ -208,8 +204,8 @@ def main(args=None):
         for iter_num, data in enumerate(dataloader_train):
             image, labels, names, idxs, crop_ids = data.as_batch()
 
-            if curr_epoch == (wr-1):
-                scheduler.base_lrs[0] = scheduler.base_lrs[0] * 0.5
+            # if curr_epoch == (wr-1):
+            #     scheduler.base_lrs[0] = scheduler.base_lrs[0] * 0.5
 
             if curr_epoch >= config.reweight:
                 if parser.reannotate:
