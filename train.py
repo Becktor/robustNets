@@ -235,7 +235,7 @@ def main(args=None):
                                                           parser.batch_size)
                 #reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                 #              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
-                reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
+                loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                                   zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost, dataset_train)
 
             # Lines 12 - 14 computing for the loss with the computed weights
@@ -432,6 +432,7 @@ def reweight_loop_old(model, lr, image, labels, parser, val_sample, m_epoch_loss
 
     if loss == zero_tensor:
         zero_loss += 1
+    return loss
 
 
 def add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, trans, idxs, update_anno):
