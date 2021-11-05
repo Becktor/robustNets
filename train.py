@@ -123,7 +123,7 @@ def main(args=None):
     elif parser.depth == 34:
         model = retinanet.resnet34(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 50:
-        model = retinanet.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
+        model = retinanet_normal.resnet50(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 101:
         model = retinanet.resnet101(num_classes=dataset_train.num_classes(), pretrained=pre_trained)
     elif parser.depth == 152:
@@ -135,8 +135,8 @@ def main(args=None):
     """
     checkpoint_dir = os.path.join('trained_models', wandb_name)
 
-    #count_parameters(model)
-    optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
+    # count_parameters(model)
+    optimizer = optim.AdamW(model.parameters(), lr=config.learning_rate)
 
     # n_iters = len(dataset_train) / parser.batch_size
     # scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=config.step_size,
@@ -233,10 +233,10 @@ def main(args=None):
             if curr_epoch >= config.reweight:
                 val_samples = get_random_weighting_sample(weighted_dataset_in_mem,
                                                           parser.batch_size)
-                #reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
-                #              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
-                loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
-                                  zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost, dataset_train)
+                loss = reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
+                                     zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
+                # loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
+                #                  zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost, dataset_train)
 
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
@@ -382,6 +382,7 @@ def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_l
         loss = torch.sum(cost * w)
     if loss == zero_tensor:
         zero_loss += 1
+    return loss
 
 
 def reweight_loop_old(model, lr, image, labels, parser, val_sample, m_epoch_loss, zero_tensor,
