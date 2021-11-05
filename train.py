@@ -235,9 +235,10 @@ def main(args=None):
                                                           parser.batch_size)
                 #reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                 #              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
-                loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
+                rew_loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                                   zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost, dataset_train)
-
+                if rew_loss:
+                    loss = rew_loss
             # Lines 12 - 14 computing for the loss with the computed weights
             # and then perform a parameter update
 
