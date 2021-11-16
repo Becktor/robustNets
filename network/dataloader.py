@@ -369,6 +369,7 @@ def crop_collater(data):
     index = [s.index for s in data]
     batch_size = len(imgs)
     collated_samples = []
+    too_small = []
     max_num_annots = max(a.shape[0] for a in annots)
     for batch_elem in range(batch_size):
         new_crop = []
@@ -419,8 +420,10 @@ def crop_collater(data):
                     if (key == 0) or (key == 1):
                         anno[:4] *= scale
                     area = (anno[2] - anno[0]) * (anno[3] - anno[1])
-                    if area >= 16:
+                    if area >= 32:
                         sample_crops.setdefault(key, []).append(anno)
+                    else:
+                        too_small.append((names[batch_elem], area))
         sm1 = skimage.transform.resize(sm1, (int(height), int(round(width))))
         sm2 = skimage.transform.resize(sm2, (int(height), int(round(width))))
 
@@ -573,6 +576,7 @@ class Crop(object):
         image = sample.img
         annots = sample.annot
         name = sample.name
+        not_added=[]
         if image.shape[0] > 1080:
             scale = 1080 / image.shape[0]
             image = skimage.transform.resize(image, (1080, int(image.shape[1] * scale)))
@@ -614,7 +618,11 @@ class Crop(object):
                     n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
 
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
+                    area = (anno[2]-anno[0]) * (anno[3]-anno[1])
+                    #if area > 32:
                     sample_crops.setdefault(key, []).append(anno)
+                    # else:
+                    #     not_added.append((key,area))
 
         keys = list(cropped_imgs.keys())
         key = random.choice(keys)

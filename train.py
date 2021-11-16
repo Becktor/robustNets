@@ -57,7 +57,8 @@ def main(args=None):
             "pre_trained": parser.pre_trained,
             "train_set": parser.csv_train,
             "batch_size": parser.batch_size,
-            "reweight_mod": reweight_mod
+            "reweight_mod": reweight_mod,
+            "reanno": parser.reannotate
         })
     config = wandb.config
     wandb_name = wandb.run.name + "_" + wandb.run.id
@@ -135,7 +136,7 @@ def main(args=None):
     """
     checkpoint_dir = os.path.join('trained_models', wandb_name)
 
-    #count_parameters(model)
+    # count_parameters(model)
     optimizer = optim.AdamW(model.params(), lr=config.learning_rate)
 
     # n_iters = len(dataset_train) / parser.batch_size
@@ -233,10 +234,11 @@ def main(args=None):
             if curr_epoch >= config.reweight:
                 val_samples = get_random_weighting_sample(weighted_dataset_in_mem,
                                                           parser.batch_size)
-                #reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
+                # reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                 #              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
                 rew_loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
-                                  zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost, dataset_train)
+                                             zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost,
+                                             dataset_train)
                 if rew_loss:
                     loss = rew_loss
             # Lines 12 - 14 computing for the loss with the computed weights
@@ -285,7 +287,7 @@ def main(args=None):
         if parser.csv_val is not None:
             print('Evaluating dataset')
 
-            _ap, rl = csv_eval.evaluate(dataloader_val, model, 0.3, 0.3)
+            _ap, rl = csv_eval.evaluate(dataloader_val, model)
 
             # Write to Wandb
             wandb.log({"train/Epoch_runtime": runtime,
@@ -296,9 +298,10 @@ def main(args=None):
                        "val/Buoy_Precision": rl[0][2],
                        "val/Boat_Recall": rl[1][1],
                        "val/Boat_Precision": rl[1][2],
-                       "mAP/AP_Buoy": rl[2][1],
-                       "mAP/AP_Boat": rl[3][1],
-                       "mAP/mAP": rl[4],
+                       "mAP/AP_Buoy": rl[0][3],
+                       "mAP/AP_Boat": rl[1][3],
+                       "mAP/mAP": rl['map'],
+                       "mAP/mAP50": rl['map50'],
                        "lr/Learning Rate": lr})
 
             checkpoint = {
@@ -306,21 +309,20 @@ def main(args=None):
                 'state_dict': model.state_dict(),
                 'optimizer': optimizer.state_dict(),
                 'scheduler': scheduler.state_dict(),
-                'buoy_AP': rl[2][1],
-                'boat_AP': rl[3][1],
-                'mAP': rl[4]
+                'buoy_AP': rl[0][3],
+                'boat_AP': rl[1][3],
+                'mAP': rl['map']
             }
 
-            if rl[4] > mAP:
-                mAP = rl[4]
+            if rl['map'] > mAP:
+                mAP = rl['map']
                 save_ckp(checkpoint, model, True, checkpoint_dir, curr_epoch)
             else:
                 save_ckp(checkpoint, model, False, checkpoint_dir, curr_epoch)
 
             loss_file = open(os.path.join(checkpoint_dir, "loss.csv"), "a+")
-            loss_file.write("{}, {}, {}, {}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
-                                                                          rl[0], rl[1], rl[2], rl[3],
-                                                                          rl[2][1], rl[3][1], rl[4]))
+            loss_file.write("{}, {}, {}, {}, {}, {}\n".format(curr_epoch, np.mean(loss_hist),
+                                                              rl[0], rl[1], rl['map'], rl['map50']))
             loss_file.close()
     model.eval()
     torch.save(model, 'model_final.pt')

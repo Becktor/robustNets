@@ -3,7 +3,9 @@ from __future__ import print_function
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
-
+from tqdm import tqdm
+import os
+import wandb
 from network.dataloader import Sample
 
 
@@ -34,6 +36,143 @@ def compute_overlap(a, b):
     return intersection / ua
 
 
+def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=()):
+    """ Compute the average precision, given the recall and precision curves.
+    Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
+    # Arguments
+        tp:  True positives (nparray, nx1 or nx10).
+        conf:  Objectness value from 0-1 (nparray).
+        pred_cls:  Predicted object classes (nparray).
+        target_cls:  True object classes (nparray).
+        plot:  Plot precision-recall curve at mAP@0.5
+        save_dir:  Plot save directory
+    # Returns
+        The average precision as computed in py-faster-rcnn.
+    """
+
+    # Sort by objectness
+    i = np.argsort(-conf)
+    tp, conf, pred_cls = tp[i], conf[i], pred_cls[i]
+    tp = np.expand_dims(tp, axis=1)
+    # Find unique classes
+    unique_classes = np.unique(target_cls)
+    nc = unique_classes.shape[0]  # number of classes, number of detections
+
+    # Create Precision-Recall curve and compute AP for each class
+    px, py = np.linspace(0, 1, 1000), []  # for plotting
+    ap, p, r = np.zeros((nc, tp.shape[1])), np.zeros((nc, 1000)), np.zeros((nc, 1000))
+    for ci, c in enumerate(unique_classes):
+        i = pred_cls == c
+        n_l = (target_cls == c).sum()  # number of labels
+        n_p = i.sum()  # number of predictions
+
+        if n_p == 0 or n_l == 0:
+            continue
+        else:
+            # Accumulate FPs and TPs
+            fpc = (1 - tp[i]).cumsum(0)
+            tpc = tp[i].cumsum(0)
+
+            # Recall
+            recall = tpc / (n_l + 1e-16)  # recall curve
+            r[ci] = np.interp(-px, -conf[i], recall[:, 0], left=0)  # negative x, xp because xp decreases
+
+            # Precision
+            precision = tpc / (tpc + fpc)  # precision curve
+            p[ci] = np.interp(-px, -conf[i], precision[:, 0], left=1)  # p at pr_score
+
+            # AP from recall-precision curve
+            for j in range(tp.shape[1]):
+                ap[ci, j], mpre, mrec = compute_ap(recall[:, j], precision[:, j])
+                if plot and j == 0:
+                    py.append(np.interp(px, mrec, mpre))  # precision at mAP@0.5
+
+    # Compute F1 (harmonic mean of precision and recall)
+    f1 = 2 * p * r / (p + r + 1e-16)
+    names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
+    names = {i: v for i, v in enumerate(names)}  # to dict
+    if plot:
+        plot_pr_curve(px, py, ap, os.path.join(save_dir, 'PR_curve.png'), names)
+        plot_mc_curve(px, f1, os.path.join(save_dir, 'F1_curve.png'), names, ylabel='F1')
+        plot_mc_curve(px, p, os.path.join(save_dir, 'P_curve.png'), names, ylabel='Precision')
+        plot_mc_curve(px, r, os.path.join(save_dir, 'R_curve.png'), names, ylabel='Recall')
+
+    i = f1.mean(0).argmax()  # max F1 index
+    return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
+
+
+def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
+    # Precision-recall curve
+    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+    py = np.stack(py, axis=1)
+
+    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+        for i, y in enumerate(py.T):
+            ax.plot(px, y, linewidth=1, label=f'{names[i]} {ap[i, 0]:.3f}')  # plot(recall, precision)
+    else:
+        ax.plot(px, py, linewidth=1, color='grey')  # plot(recall, precision)
+
+    ax.plot(px, py.mean(1), linewidth=3, color='blue', label='all classes %.3f mAP@0.5' % ap[:, 0].mean())
+    ax.set_xlabel('Recall')
+    ax.set_ylabel('Precision')
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    wandb.log({save_dir: ax})
+    fig.savefig(save_dir, dpi=250)
+    plt.close()
+
+
+def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
+    # Metric-confidence curve4
+    fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
+
+    if 0 < len(names) < 21:  # display per-class legend if < 21 classes
+        for i, y in enumerate(py):
+            ax.plot(px, y, linewidth=1, label=f'{names[i]}')  # plot(confidence, metric)
+    else:
+        ax.plot(px, py.T, linewidth=1, color='grey')  # plot(confidence, metric)
+
+    y = py.mean(0)
+    ax.plot(px, y, linewidth=3, color='blue', label=f'all classes {y.max():.2f} at {px[y.argmax()]:.3f}')
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
+    wandb.log({save_dir: ax})
+    fig.savefig(save_dir, dpi=250)
+    plt.close()
+
+
+def compute_ap(recall, precision):
+    """ Compute the average precision, given the recall and precision curves
+    # Arguments
+        recall:    The recall curve (list)
+        precision: The precision curve (list)
+    # Returns
+        Average precision, precision curve, recall curve
+    """
+
+    # Append sentinel values to beginning and end
+    mrec = np.concatenate(([0.0], recall, [1.0]))
+    mpre = np.concatenate(([1.0], precision, [0.0]))
+
+    # Compute the precision envelope
+    mpre = np.flip(np.maximum.accumulate(np.flip(mpre)))
+
+    # Integrate area under curve
+    method = 'interp'  # methods: 'continuous', 'interp'
+    if method == 'interp':
+        x = np.linspace(0, 1, 101)  # 101-point interp (COCO)
+        ap = np.trapz(np.interp(x, mrec, mpre), x)  # integrate
+    else:  # 'continuous'
+        i = np.where(mrec[1:] != mrec[:-1])[0]  # points where x axis (recall) changes
+        ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])  # area under curve
+
+    return ap, mpre, mrec
+
+
 def _compute_ap(recall, precision, noise=0, label="", plot=False):
     """ Compute the average precision, given the recall and precision curves.
     Code originally from https://github.com/rbgirshick/py-faster-rcnn.
@@ -61,7 +200,7 @@ def _compute_ap(recall, precision, noise=0, label="", plot=False):
         ax.set_ylabel('Precision')
         ax.set_xlabel('Recall')
         minval = np.min(mpre[np.nonzero(mpre)])
-        ax.set_ylim([0.88, 1.01])
+        ax.set_ylim([0.0, 1.0])
         ax.set_xlim([0.0, 1.0])
         ax.minorticks_on()
         ax.grid(which='minor', linestyle=':', linewidth='0.5', color='black', alpha=0.5)
@@ -106,7 +245,7 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
     model.eval()
 
     with torch.no_grad():
-        for index, data in enumerate(dataset):
+        for index, data in tqdm(enumerate(dataset)):
             annotation = data.annot.numpy()
             img = data.img
 
@@ -168,7 +307,7 @@ def get_detections(dataloader, model, score_threshold=0.05, max_detections=100, 
                 for label in range(ds.num_classes()):
                     all_detections[index][label] = np.zeros((0, 5))
 
-            print('{}/{}'.format(index + 1, len(dataset)), end='\r')
+            # print('{}/{}'.format(index + 1, len(dataset)), end='\r')
 
     return all_detections, all_annotations
 
@@ -203,7 +342,7 @@ def evaluate(
         generator,
         model,
         iou_threshold=0.5,
-        score_threshold=0.05,
+        score_threshold=0.001,
         max_detections=100,
         noise=0,
         save_path=None,
@@ -228,33 +367,37 @@ def evaluate(
     if not detections:
         all_detections, all_annotations = get_detections(generator, model, score_threshold=score_threshold,
                                                          max_detections=max_detections)
-        # all_annotations = get_annotations(generator)
     else:
         all_detections = detections
         all_annotations = annotations
 
-    return_list = {0: (0, 0, 0), 1: (0, 0, 0), 2: (0, 0), 3: (0, 0), 4: 0}
+    return_list = {0: (0, 0, 0), 1: (0, 0, 0), "map": 0, "map50": "0"}
     average_precisions = {}
-    conf_matrix = {}
+    all_pred_lbl = []
+    all_actual_labels, all_scores, all_true_positives = [], [], []
+
     print('\nRecall and Precision', file=f)
     for label in range(generator.dataset.num_classes()):
-        false_positives = np.zeros((0,))
-        true_positives = np.zeros((0,))
-        scores = np.zeros((0,))
+        false_positives = []  # np.zeros((len(all_detections),))
+        true_positives = []  # np.zeros((len(all_detections),))
+        scores = []
+        pred_labels = []
+        actual_labels = []
         num_annotations = 0.0
-
         for i in range(len(all_detections)):
             detections = all_detections[i][label]
             annotations = all_annotations[i][label]
             num_annotations += annotations.shape[0]
+            for _ in range(annotations.shape[0]):
+                actual_labels.append(label)
             detected_annotations = []
 
             for d in detections:
                 scores = np.append(scores, d[4])
-
+                pred_labels.append(label)
                 if annotations.shape[0] == 0:
-                    false_positives = np.append(false_positives, 1)
-                    true_positives = np.append(true_positives, 0)
+                    false_positives.append(1)
+                    true_positives.append(0)
                     continue
 
                 overlaps = compute_overlap(np.expand_dims(d, axis=0), annotations)
@@ -262,48 +405,42 @@ def evaluate(
                 max_overlap = overlaps[0, assigned_annotation]
 
                 if max_overlap >= iou_threshold and assigned_annotation not in detected_annotations:
-                    false_positives = np.append(false_positives, 0)
-                    true_positives = np.append(true_positives, 1)
+                    false_positives.append(0)
+                    true_positives.append(1)
                     detected_annotations.append(assigned_annotation)
                 else:
-                    false_positives = np.append(false_positives, 1)
-                    true_positives = np.append(true_positives, 0)
+                    false_positives.append(1)
+                    true_positives.append(0)
+
+        all_actual_labels.append(actual_labels)
+        all_pred_lbl.append(pred_labels)
+        all_scores.append(scores)
+        all_true_positives.append(true_positives)
 
         # no annotations -> AP for this class is 0 (is this correct?)
         if num_annotations == 0:
             average_precisions[label] = 0, 0
             continue
 
-        # sort by score
-        indices = np.argsort(-scores)
-        false_positives = false_positives[indices]
-        true_positives = true_positives[indices]
-
-        # compute false positives and true positives
-        false_positives = np.cumsum(false_positives)
-        true_positives = np.cumsum(true_positives)
-
-        # compute recall and precision
-        recall = true_positives / num_annotations
-        precision = true_positives / np.maximum(true_positives + false_positives, np.finfo(np.float64).eps)
-        label_name = generator.dataset.label_to_name(label)
-        print(label_name)
-        print("Recall: {}".format(max(recall, default=float('NaN'))), file=f)
-        print("Precision: {}".format(min(precision, default=float('NaN'))), file=f)
-        return_list[label] = (label_name, max(recall, default=float('NaN')), min(precision, default=float('NaN')))
-
-        # compute average precision
-        average_precision = _compute_ap(recall, precision, noise=noise, label=label, plot=plot)
-        average_precisions[label] = average_precision, num_annotations
-
-    print('\nAP:', file=f)
-    map_list = []
+    names = {}
     for label in range(generator.dataset.num_classes()):
         label_name = generator.dataset.label_to_name(label)
-        map_list.append(average_precisions[label][0])
-        print('{}: {}'.format(label_name, average_precisions[label][0]), file=f)
-        return_list[2 + label] = (label_name, average_precisions[label][0])
-    print('\nmAP: {}'.format(np.mean(map_list)), file=f)
-    return_list[4] = np.mean(map_list)
+        names[label] = label_name
+
+    p, r, ap, f1, ap_class = ap_per_class(np.concatenate(all_true_positives), np.concatenate(all_scores),
+                                          np.concatenate(all_pred_lbl), np.concatenate(all_actual_labels), plot=True,
+                                          names=names)
+    ap50, ap = ap[:, 0], ap.mean(1)
+    mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
+    for label in range(generator.dataset.num_classes()):
+        label_name = generator.dataset.label_to_name(label)
+        print('AP-{}: {}'.format(label_name, ap[label]), file=f)
+        print('recall-{}: {}'.format(label_name, r[label]), file=f)
+        print('precision-{}: {}'.format(label_name, p[label]), file=f)
+        return_list[label] = (label_name, r[label], p[label], ap[label])
+    print('\nmAP50: {}, mAP: {}'.format(map50, map), file=f)
+    return_list["map"] = map
+    return_list["map50"] = map50
     print('-----------------------------', file=f)
-    return average_precisions, return_list
+
+    return ap, return_list
