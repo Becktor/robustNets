@@ -14,6 +14,7 @@ import time
 import csv
 import higher
 from tqdm import tqdm
+import plotly
 
 assert torch.__version__.split('.')[0] == '1'
 
@@ -302,7 +303,8 @@ def main(args=None):
                        "mAP/AP_Boat": rl[1][3],
                        "mAP/mAP": rl['map'],
                        "mAP/mAP50": rl['map50'],
-                       "lr/Learning Rate": lr})
+                       "lr/Learning Rate": lr,
+                       'train/epoch': curr_epoch})
 
             checkpoint = {
                 'epoch': curr_epoch + 1,

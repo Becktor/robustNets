@@ -7,6 +7,7 @@ from tqdm import tqdm
 import os
 import wandb
 from network.dataloader import Sample
+import plotly
 
 
 def compute_overlap(a, b):
@@ -92,10 +93,10 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
     names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
     names = {i: v for i, v in enumerate(names)}  # to dict
     if plot:
-        plot_pr_curve(px, py, ap, os.path.join(save_dir, 'PR_curve.png'), names)
-        plot_mc_curve(px, f1, os.path.join(save_dir, 'F1_curve.png'), names, ylabel='F1')
-        plot_mc_curve(px, p, os.path.join(save_dir, 'P_curve.png'), names, ylabel='Precision')
-        plot_mc_curve(px, r, os.path.join(save_dir, 'R_curve.png'), names, ylabel='Recall')
+        pr_p = plot_pr_curve(px, py, ap, 'PR_curve.png', names)
+        f1_p = plot_mc_curve(px, f1, 'F1_curve.png', names, ylabel='F1')
+        p_p = plot_mc_curve(px, p, 'P_curve.png', names, ylabel='Precision')
+        r_p = plot_mc_curve(px, r, 'R_curve.png', names, ylabel='Recall')
 
     i = f1.mean(0).argmax()  # max F1 index
     return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
@@ -118,9 +119,11 @@ def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    wandb.log({save_dir: ax})
+    f_img = wandb.Image(fig)
+    wandb.log({save_dir: f_img})
     fig.savefig(save_dir, dpi=250)
     plt.close()
+    return fig
 
 
 def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
@@ -140,9 +143,11 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
-    wandb.log({save_dir: ax})
+    f_img = wandb.Image(fig)
+    wandb.log({save_dir: f_img})
     fig.savefig(save_dir, dpi=250)
     plt.close()
+    return fig
 
 
 def compute_ap(recall, precision):
