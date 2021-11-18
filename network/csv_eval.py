@@ -7,7 +7,6 @@ from tqdm import tqdm
 import os
 import wandb
 from network.dataloader import Sample
-import plotly
 
 
 def compute_overlap(a, b):
