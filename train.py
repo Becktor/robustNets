@@ -417,13 +417,13 @@ def reweight_loop_old(model, lr, image, labels, parser, val_sample, m_epoch_loss
     grad_eps = torch.autograd.grad(l_g_meta, eps)[0].detach()
     # Line 11 computing and normalizing the weights
     w_tilde = torch.clamp(-grad_eps, min=0)
-    norm_c = torch.sum(w_tilde)
+    norm_c = torch.sum(w_tilde) + 1e-10
     if norm_c != 0:
         w = w_tilde / norm_c
     else:
         w = w_tilde
 
-    wl = torch.le(w, 0.005)
+    wl = torch.le(w, 0.01)
     ### meta annotation
 
     update_anno = np.full(parser.batch_size, False)

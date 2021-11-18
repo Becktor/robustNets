@@ -272,7 +272,7 @@ class ResNet(MetaModule):
 
             scores = torch.max(classification, dim=2, keepdim=True)[0]
 
-            scores_over_thresh = (scores > 0.3)[:, :, 0]  # certainty threshold
+            scores_over_thresh = (scores > 0.05)[:, :, 0]  # certainty threshold
 
             if scores_over_thresh.sum() == 0:
                 # no boxes to NMS, just return
@@ -282,7 +282,7 @@ class ResNet(MetaModule):
             transformed_anchors = [transformed_anchors[i, scores_over_thresh[i], :] for i in range(transformed_anchors.shape[0])]
             scores = [scores[i, scores_over_thresh[i], :] for i in range(scores.shape[0])]
 
-            batched_nms_idxs = [nms(transformed_anchors[i], scores[i][:, 0], 0.1) for i in
+            batched_nms_idxs = [nms(transformed_anchors[i], scores[i][:, 0], 0.5) for i in
                                 range(len(transformed_anchors))]
             scores_classes = []
             for i, c in enumerate(classification):

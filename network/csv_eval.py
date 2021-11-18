@@ -92,7 +92,7 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
     f1 = 2 * p * r / (p + r + 1e-16)
     names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
     names = {i: v for i, v in enumerate(names)}  # to dict
-    if plot and py.shape[0] != 0:
+    if plot and len(py) != 0:
         pr_p = plot_pr_curve(px, py, ap, 'PR_curve.png', names)
         f1_p = plot_mc_curve(px, f1, 'F1_curve.png', names, ylabel='F1')
         p_p = plot_mc_curve(px, p, 'P_curve.png', names, ylabel='Precision')
