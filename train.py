@@ -93,26 +93,28 @@ def main(args=None):
         sampler_val = AspectRatioBasedSampler(dataset_val, batch_size=1, drop_last=True)
         dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=crop_collater, batch_sampler=sampler_val)
 
-    dataloader_weight = DataLoader(dataset_weight, batch_size=8,
-                                   num_workers=4, collate_fn=collater)
     weighted_dataset_in_mem = {}
-    temp = []
-    max_shape = -1
-    for _ in tqdm(range(100)):
-        for weighted_data in dataloader_weight:
-            v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
-            max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape
-            temp.append((v_image, v_labels, w_names, idx))
+    if dataset_weight is not None:
+        dataloader_weight = DataLoader(dataset_weight, batch_size=8,
+                                   num_workers=4, collate_fn=collater)
 
-    for weighted_data in temp:
-        v_image, v_labels, w_names, idx = weighted_data
-        for x in range(v_image.shape[0]):
-            tmp = torch.ones((max_shape, 5)) * -1
-            tmp[0:v_labels[x].shape[0], :] = v_labels[x]
-            if idx[x] in weighted_dataset_in_mem:
-                weighted_dataset_in_mem[idx[x]].append((v_image[x], tmp.cuda(), w_names[x], idx[x]))
-            else:
-                weighted_dataset_in_mem[idx[x]] = [(v_image[x], tmp.cuda(), w_names[x], idx[x])]
+        temp = []
+        max_shape = -1
+        for _ in tqdm(range(100)):
+            for weighted_data in dataloader_weight:
+                v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
+                max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape
+                temp.append((v_image, v_labels, w_names, idx))
+
+        for weighted_data in temp:
+            v_image, v_labels, w_names, idx = weighted_data
+            for x in range(v_image.shape[0]):
+                tmp = torch.ones((max_shape, 5)) * -1
+                tmp[0:v_labels[x].shape[0], :] = v_labels[x]
+                if idx[x] in weighted_dataset_in_mem:
+                    weighted_dataset_in_mem[idx[x]].append((v_image[x], tmp.cuda(), w_names[x], idx[x]))
+                else:
+                    weighted_dataset_in_mem[idx[x]] = [(v_image[x], tmp.cuda(), w_names[x], idx[x])]
 
     pre_trained = False
     if parser.pre_trained:
