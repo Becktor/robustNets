@@ -121,7 +121,7 @@ def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     f_img = wandb.Image(fig)
     wandb.log({save_dir: f_img})
-    fig.savefig(save_dir, dpi=250)
+    #fig.savefig(save_dir, dpi=250)
     plt.close()
     return fig
 
@@ -145,7 +145,7 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     plt.legend(bbox_to_anchor=(1.04, 1), loc="upper left")
     f_img = wandb.Image(fig)
     wandb.log({save_dir: f_img})
-    fig.savefig(save_dir, dpi=250)
+    #fig.savefig(save_dir, dpi=250)
     plt.close()
     return fig
 
