@@ -30,7 +30,7 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=180)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=360)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=8)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
@@ -80,7 +80,7 @@ def main(args=None):
 
     if parser.csv_weight is None:
         dataset_weight = None
-        print('No validation annotations provided.')
+        print('No weight annotations provided.')
     else:
         dataset_weight = CSVDataset(train_file=parser.csv_weight, class_list=parser.csv_classes,
                                     transform=transforms.Compose([Crop(reweight=True), Augmenter(), Resizer()]))
@@ -94,6 +94,7 @@ def main(args=None):
         dataloader_val = DataLoader(dataset_val, num_workers=1, collate_fn=crop_collater, batch_sampler=sampler_val)
 
     weighted_dataset_in_mem = {}
+
     if dataset_weight is not None:
         dataloader_weight = DataLoader(dataset_weight, batch_size=8,
                                    num_workers=4, collate_fn=collater)
