@@ -97,11 +97,11 @@ def main(args=None):
 
     if dataset_weight is not None:
         dataloader_weight = DataLoader(dataset_weight, batch_size=8,
-                                   num_workers=4, collate_fn=collater)
+                                       num_workers=4, collate_fn=collater)
 
         temp = []
         max_shape = -1
-        for _ in tqdm(range(100)):
+        for _ in tqdm(range(1)):
             for weighted_data in dataloader_weight:
                 v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
                 max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape
@@ -238,8 +238,8 @@ def main(args=None):
             if curr_epoch >= config.reweight:
                 val_samples = get_random_weighting_sample(weighted_dataset_in_mem,
                                                           parser.batch_size)
-                # reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
-                #              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost)
+                #rew_loss = reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss,
+                #                         reweight_cases, names, trans, crop_ids, altered_labels, cost)
                 rew_loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                                              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost,
                                              dataset_train)
@@ -349,8 +349,8 @@ def get_random_weighting_sample(weight_samples_dict, batch_size):
     return ret_samples
 
 
-def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_loss, zero_tensor,
-                  zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost):
+def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_loss,
+                  reweight_cases, names, trans, crop_ids, altered_labels, cost):
     with higher.innerloop_ctx(model, optimizer) as (meta_model, meta_opt):
         # y_f_hat = meta_net(image)
         _, _, meta_cl = meta_model([image, labels])
@@ -376,7 +376,7 @@ def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_l
         else:
             w = w_tilde
 
-        wl = torch.le(w, 0.005)
+        wl = torch.le(w, 0.5/eps.shape[0])
         ####
         ### meta annotation
         ####
@@ -388,8 +388,7 @@ def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_l
         if update_anno.sum() > 0:
             update_annotation(image, update_anno, idxs, crop_ids, meta_model, altered_labels)
         loss = torch.sum(cost * w)
-    if loss == zero_tensor:
-        zero_loss += 1
+    return loss
 
 
 def reweight_loop_old(model, lr, image, labels, parser, val_sample, m_epoch_loss, zero_tensor,
@@ -426,7 +425,7 @@ def reweight_loop_old(model, lr, image, labels, parser, val_sample, m_epoch_loss
     else:
         w = w_tilde
 
-    wl = torch.le(w, 0.01)
+    wl = torch.le(w, 0.5/eps.shape[0])
     ### meta annotation
 
     update_anno = np.full(parser.batch_size, False)
