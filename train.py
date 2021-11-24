@@ -30,7 +30,7 @@ def main(args=None):
     parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
     parser.add_argument('--csv_weight', help='Path to file containing validation annotations')
     parser.add_argument('--depth', help='ResNet depth, must be one of 18, 34, 50, 101, 152', type=int, default=18)
-    parser.add_argument('--epochs', help='Number of epochs', type=int, default=360)
+    parser.add_argument('--epochs', help='Number of epochs', type=int, default=200)
     parser.add_argument('--batch_size', help='Batch size', type=int, default=8)
     parser.add_argument('--noise', help='Batch size', type=bool, default=False)
     parser.add_argument('--continue_training', help='Path to previous ckp', type=str, default=None)
@@ -101,7 +101,7 @@ def main(args=None):
 
         temp = []
         max_shape = -1
-        for _ in tqdm(range(1)):
+        for _ in tqdm(range(100)):
             for weighted_data in dataloader_weight:
                 v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
                 max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape
@@ -151,7 +151,7 @@ def main(args=None):
 
     n_iters = int(len(dataset_train) / parser.batch_size)
     wr = 10
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * parser.epochs, 2)
 
     prev_epoch = 0
     if parser.continue_training is not None:
