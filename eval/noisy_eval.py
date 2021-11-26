@@ -26,19 +26,11 @@ def main(args=None, model=None):
         if torch.cuda.is_available():
             model = model.cuda()
 
-    if torch.cuda.is_available():
-        model = torch.nn.DataParallel(model).cuda()
-    else:
-        model = torch.nn.DataParallel(model)
-
-    model, _, _ = load_ckp(parser.model, model)
-    #model = model2.load(parser.model)
+    model = load_base_model(parser.model, model)
     model.eval()
 
     print('Evaluating dataset')
-    mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.3)
-    mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.5)
-    mAP, rl = csv_eval.evaluate(dataset_val, model, 0.3, 0.7)
+    mAP, rl = csv_eval.evaluate(dataset_val, model)
 
 if __name__ == '__main__':
     main()

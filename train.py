@@ -47,10 +47,10 @@ def main(args=None):
 
     reweight_mod = reweight_mods[parser.flip_mod]
     if parser.continue_training is not None:
-        id = parser.continue_training[-8:]
-        wandb.init(project="reanno", id=id, resume=True)
+        wandb_id = parser.continue_training[-8:]
+        wandb.init(project="Re-Annotation", id=wandb_id, resume=True)
     else:
-        wandb.init(project="reanno", config={
+        wandb.init(project="Re-Annotation", config={
             "learning_rate": 5e-5,
             "ResNet": parser.depth,
             "reweight": parser.rew_start,
@@ -61,8 +61,12 @@ def main(args=None):
             "reweight_mod": reweight_mod,
             "reanno": parser.reannotate
         })
+        wandb.run.name = "mod{}_rs{}_ra{}_{}".format(parser.reweight_mod,
+                                                     parser.rew_start,
+                                                     parser.reannotate,
+                                                     wandb.run.id)
     config = wandb.config
-    wandb_name = wandb.run.name + "_" + wandb.run.id
+    wandb_name = wandb.run.name
 
     """
     Data loaders
@@ -238,7 +242,7 @@ def main(args=None):
             if curr_epoch >= config.reweight:
                 val_samples = get_random_weighting_sample(weighted_dataset_in_mem,
                                                           parser.batch_size)
-                #rew_loss = reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss,
+                # rew_loss = reweight_loop(model, optimizer, image, labels, parser, val_samples, m_epoch_loss,
                 #                         reweight_cases, names, trans, crop_ids, altered_labels, cost)
                 rew_loss = reweight_loop_old(model, lr, image, labels, parser, val_samples, m_epoch_loss, zero_tensor,
                                              zero_loss, reweight_cases, names, trans, crop_ids, altered_labels, cost,
@@ -376,7 +380,7 @@ def reweight_loop(model, optimizer, image, labels, parser, val_sample, m_epoch_l
         else:
             w = w_tilde
 
-        wl = torch.le(w, 0.5/eps.shape[0])
+        wl = torch.le(w, 0.5 / eps.shape[0])
         ####
         ### meta annotation
         ####
@@ -425,7 +429,7 @@ def reweight_loop_old(model, lr, image, labels, parser, val_sample, m_epoch_loss
     else:
         w = w_tilde
 
-    wl = torch.le(w, 0.5/eps.shape[0])
+    wl = torch.le(w, 0.5 / eps.shape[0])
     ### meta annotation
 
     update_anno = np.full(parser.batch_size, False)

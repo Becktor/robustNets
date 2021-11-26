@@ -6,10 +6,6 @@ import cv2
 import numpy as np
 import torch
 
-if os.name == 'nt':
-    import ctypes
-
-    ctypes.cdll.LoadLibrary('caffe2_nvrtc.dll')
 from network import retinanet
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -37,7 +33,6 @@ def main(args=None):
     retinanet = retinanet.resnet50(dataset_val.num_classes())
 
     use_gpu = True
-
     if use_gpu:
         retinanet = retinanet.cuda()
 
