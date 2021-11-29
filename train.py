@@ -61,7 +61,7 @@ def main(args=None):
             "reweight_mod": reweight_mod,
             "reanno": parser.reannotate
         })
-        wandb.run.name = "mod{}_rs{}_ra{}_{}".format(parser.reweight_mod,
+        wandb.run.name = "mod{}_rs{}_ra{}_{}".format(reweight_mod,
                                                      parser.rew_start,
                                                      parser.reannotate,
                                                      wandb.run.id)
@@ -105,7 +105,7 @@ def main(args=None):
 
         temp = []
         max_shape = -1
-        for _ in tqdm(range(100)):
+        for _ in tqdm(range(1)):
             for weighted_data in dataloader_weight:
                 v_image, v_labels, w_names, idx, _ = weighted_data.as_batch()
                 max_shape = v_labels.shape[1] if max_shape <= v_labels.shape[1] else max_shape

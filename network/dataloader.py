@@ -437,7 +437,7 @@ def crop_collater(data):
 
             new_anno = []
             if key in sample_crops:
-                an = sample_crops[key]
+                an = np.stack(sample_crops[key])
                 annot = torch.FloatTensor(an)
                 new_anno = annot
             new_crop.append((image, new_anno))
