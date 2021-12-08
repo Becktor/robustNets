@@ -39,7 +39,7 @@ def main(args=None):
     parser.add_argument('--pre_trained', help='ResNet base pre-trained or not', type=bool, default=True)
     parser.add_argument('--label_flip', help='Label_flipping', type=bool, default=False)
     parser.add_argument('--flip_mod', help='dataloader flip modifier', type=int, default=0)
-    parser.add_argument('--rew_start', help='reweight starting point', type=int, default=0)
+    parser.add_argument('--rew_start', help='reweight starting point', type=int, default=200)
     parser.add_argument('--reannotate', help='reannotate samples', type=bool, default=False)
 
     parser = parser.parse_args(args)

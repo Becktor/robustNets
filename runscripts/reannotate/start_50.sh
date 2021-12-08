@@ -1,4 +1,4 @@
-#!/bin/sh
+j!/bin/sh
 ### General options
 ### -- specify queue --
 #BSUB -q gpuv100
@@ -30,4 +30,4 @@
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/datasets/dataset_csvs/reannotation_set_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/datasets/dataset_csvs/reannotation_valset_hpc.csv --csv_weight /work1/jbibe/datasets/dataset_csvs/weightset_85.csv --batch_size=16 --depth=50 --flip_mod 2 --rew_start 200 --continue_training trained_models/wise-jazz-296_314pnhq7
+python train.py --csv_train /work1/jbibe/datasets/dataset_csvs/reannotation_set_hpc.csv --csv_classes classes.csv --csv_val /work1/jbibe/datasets/dataset_csvs/reannotation_valset_hpc.csv --csv_weight /work1/jbibe/datasets/dataset_csvs/weightset_85.csv --batch_size 16 --depth 50 --epochs 180 --flip_mod 2 
