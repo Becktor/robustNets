@@ -420,7 +420,7 @@ def crop_collater(data):
                     if (key == 0) or (key == 1):
                         anno[:4] *= scale
                     area = (anno[2] - anno[0]) * (anno[3] - anno[1])
-                    if area >= 32:
+                    if area >= 48:
                         sample_crops.setdefault(key, []).append(anno)
                     else:
                         too_small.append((names[batch_elem], area))
@@ -433,8 +433,10 @@ def crop_collater(data):
 
         for key in cropped_imgs:
             img, sp = cropped_imgs[key]
-            image = torch.FloatTensor(img.copy())
-
+            try:
+                image = torch.FloatTensor(img.copy())
+            except Exception as e:
+                print(e)
             new_anno = []
             if key in sample_crops:
                 an = np.stack(sample_crops[key])

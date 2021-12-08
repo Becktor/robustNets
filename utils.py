@@ -40,6 +40,7 @@ def load_ckp(checkpoint_filepath, model, optimizer=None, scheduler=None):
 
 def load_base_model(path, model):
     checkpoint = torch.load(path)
+    print("loading epoch: {}".format(checkpoint['epoch']))
     model.load_state_dict(checkpoint['state_dict'], strict=False)
     return model
 

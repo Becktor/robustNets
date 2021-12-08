@@ -267,6 +267,7 @@ class ResNet(MetaModule):
         if self.training:
             return self.focalLoss(classification, regression, anchors, annotations)
         else:
+            #loss = self.focalLoss(classification, regression, anchors, annotations)
             transformed_anchors = self.regressBoxes(anchors, regression)
             transformed_anchors = self.clipBoxes(transformed_anchors, img_batch)
 
@@ -302,7 +303,7 @@ class ResNet(MetaModule):
                     tmp = ta[kk, :]
                 batched_transformed_anchors.append(tmp)
 
-            return [scores, classes, batched_transformed_anchors]
+            return [scores, classes, batched_transformed_anchors]#, loss]
 
 
 class ResNetReduced(MetaModule):

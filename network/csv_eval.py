@@ -36,7 +36,7 @@ def compute_overlap(a, b):
     return intersection / ua
 
 
-def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=()):
+def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names=(), wdb=True, name=""):
     """ Compute the average precision, given the recall and precision curves.
     Source: https://github.com/rafaelpadilla/Object-Detection-Metrics.
     # Arguments
@@ -92,16 +92,16 @@ def ap_per_class(tp, conf, pred_cls, target_cls, plot=False, save_dir='.', names
     names = [v for k, v in names.items() if k in unique_classes]  # list: only classes that have data
     names = {i: v for i, v in enumerate(names)}  # to dict
     if plot and len(py) != 0:
-        pr_p = plot_pr_curve(px, py, ap, 'PR_curve.png', names)
-        f1_p = plot_mc_curve(px, f1, 'F1_curve.png', names, ylabel='F1')
-        p_p = plot_mc_curve(px, p, 'P_curve.png', names, ylabel='Precision')
-        r_p = plot_mc_curve(px, r, 'R_curve.png', names, ylabel='Recall')
+        pr_p = plot_pr_curve(px, py, ap, 'PR_curve.png', names, wdb=wdb, name=name)
+        f1_p = plot_mc_curve(px, f1, 'F1_curve.png', names, ylabel='F1', wdb=wdb, name=name)
+        p_p = plot_mc_curve(px, p, 'P_curve.png', names, ylabel='Precision', wdb=wdb, name=name)
+        r_p = plot_mc_curve(px, r, 'R_curve.png', names, ylabel='Recall', wdb=wdb, name=name)
 
     i = f1.mean(0).argmax()  # max F1 index
     return p[:, i], r[:, i], ap, f1[:, i], unique_classes.astype('int32')
 
 
-def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
+def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=(), wdb=True, name=""):
     # Precision-recall curve
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
     py = np.stack(py, axis=1)
@@ -117,15 +117,17 @@ def plot_pr_curve(px, py, ap, save_dir='pr_curve.png', names=()):
     ax.set_ylabel('Precision')
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    plt.legend(bbox_to_anchor=(.94, 1), loc="upper left")
-    f_img = wandb.Image(fig)
-    wandb.log({save_dir: f_img})
-    #fig.savefig(save_dir, dpi=250)
+    plt.legend(bbox_to_anchor=(.7, 1), loc="upper left")
+    if wdb:
+        f_img = wandb.Image(fig)
+        wandb.log({save_dir: f_img})
+    else:
+        fig.savefig(name + "_" + save_dir, dpi=250)
     plt.close()
     return fig
 
 
-def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric'):
+def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence', ylabel='Metric', wdb=True, name=""):
     # Metric-confidence curve4
     fig, ax = plt.subplots(1, 1, figsize=(9, 6), tight_layout=True)
 
@@ -141,10 +143,12 @@ def plot_mc_curve(px, py, save_dir='mc_curve.png', names=(), xlabel='Confidence'
     ax.set_ylabel(ylabel)
     ax.set_xlim(0, 1)
     ax.set_ylim(0, 1)
-    plt.legend(bbox_to_anchor=(.94, 1), loc="upper left")
-    f_img = wandb.Image(fig)
-    wandb.log({save_dir: f_img})
-    #fig.savefig(save_dir, dpi=250)
+    plt.legend(bbox_to_anchor=(.7, 1), loc="upper left")
+    if wdb:
+        f_img = wandb.Image(fig)
+        wandb.log({save_dir: f_img})
+    else:
+        fig.savefig(name + "_" + save_dir, dpi=250)
     plt.close()
     return fig
 
@@ -353,7 +357,9 @@ def evaluate(
         detections=None,
         annotations=None,
         f=None,
-        plot=False
+        plot=False,
+        wdb=True,
+        name=""
 ):
     """ Evaluate a given dataset using a given network.
     # Arguments
@@ -433,7 +439,7 @@ def evaluate(
 
     p, r, ap, f1, ap_class = ap_per_class(np.concatenate(all_true_positives), np.concatenate(all_scores),
                                           np.concatenate(all_pred_lbl), np.concatenate(all_actual_labels), plot=True,
-                                          names=names)
+                                          names=names, wdb=wdb, name=name)
     ap50, ap = ap[:, 0], ap.mean(1)
     mp, mr, map50, map = p.mean(), r.mean(), ap50.mean(), ap.mean()
     for label in range(generator.dataset.num_classes()):
