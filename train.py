@@ -155,8 +155,8 @@ def main(args=None):
     #                                         step_size_up=n_iters, cycle_momentum=False)
 
     n_iters = int(len(dataset_train) / parser.batch_size)
-    wr = 20
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * parser.epochs, 1)
+    wr = 10
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(optimizer, n_iters * wr, 2)
 
     prev_epoch = 0
     if parser.continue_training is not None:

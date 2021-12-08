@@ -1,9 +1,9 @@
 #!/bin/sh
 ### General options
 ### -- specify queue --
-#BSUB -q gpuv100
+#BSUB -q gpua100
 ### -- set the job Name --
-#BSUB -J s_reweight
+#BSUB -J rw
 ### -- ask for number of cores (default: 1) --
 #BSUB -n 4
 ### -- Select the resources: 1 gpu in exclusive process mode --
@@ -11,8 +11,7 @@
 ### -- set walltime limit: hh:mm -- maximum 24 hours for GPU-queues right now
 #BSUB -W 24:00
 # request 5GB of system-memory
-#BSUB -R "rusage[mem=32GB]"
-#BSUB -R "select[gpu32gb]"
+#BSUB -R "rusage[mem=40GB]"
 ### -- set the email address --
 # please uncomment the following line and put in your e-mail address,
 # if you want to receive e-mail notifications on a non-default address
@@ -23,11 +22,11 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o outfiles/s_eweight_25_%J.out
-#BSUB -e outfiles/s_reweight_25_%J.err
+#BSUB -o outfiles/reweight_%J.out
+#BSUB -e outfiles/reweight_%J.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
-module load cudnn/v7.6.5.32-prod-cuda-10.0
-source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/singapore_dataset/train.csv --csv_classes classes.csv --csv_val /work1/jbibe/singapore_dataset/val.csv --batch_size=16 --depth=50 --flip_mod 4 --rew_start 200 
+module load cudnn/v8.2.0.53-prod-cuda-11.3
+source /work1/jbibe/a100/bin/activate
+python train.py --csv_train /work1/jbibe/singapore_dataset/train.csv --csv_classes classes.csv --csv_val /work1/jbibe/singapore_dataset/val.csv --batch_size=16 --depth=50 --flip_mod 2 --rew_start 200

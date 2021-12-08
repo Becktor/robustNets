@@ -30,4 +30,4 @@
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/singapore_dataset/train.csv --csv_classes classes.csv --csv_val /work1/jbibe/singapore_dataset/val.csv --csv_weight /work1/jbibe/singapore_dataset/dataset.csv --batch_size=4 --depth=50 --flip_mod 0 --rew_start 200 
+python train.py --csv_train /work1/jbibe/singapore_dataset/train.csv --csv_classes classes.csv --csv_val /work1/jbibe/singapore_dataset/val.csv --batch_size=16 --depth=50 --flip_mod 0 --rew_start 200 

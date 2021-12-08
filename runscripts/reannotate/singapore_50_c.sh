@@ -23,11 +23,11 @@
 #BSUB -N
 ### -- Specify the output and error file. %J is the job-id --
 ### -- -o and -e mean append, -oo and -eo mean overwrite --
-#BSUB -o outfiles/s_eweight_25_%J.out
-#BSUB -e outfiles/s_reweight_25_%J.err
+#BSUB -o outfiles/s_eweight_50_%J.out
+#BSUB -e outfiles/s_reweight_50_%J.err
 # -- end of LSF options --
 # Load the cuda module
 module load python3/3.6.7
 module load cudnn/v7.6.5.32-prod-cuda-10.0
 source /work1/jbibe/venv/bin/activate
-python train.py --csv_train /work1/jbibe/singapore_dataset/train.csv --csv_classes classes.csv --csv_val /work1/jbibe/singapore_dataset/val.csv --batch_size=16 --depth=50 --flip_mod 4 --rew_start 200 
+python train.py --csv_train /work1/jbibe/singapore_dataset/train.csv --csv_classes classes.csv --csv_val /work1/jbibe/singapore_dataset/val.csv --batch_size=16 --depth=50 --flip_mod 2 --rew_start 200 --continue_training trained_models/jolly-snowball-292_198ig97c 
