@@ -508,9 +508,9 @@ def check_and_replace_with_pseudo(idxs, crop_ids, pseudo_labels, labels, parser,
                 temp[:, 0:original[1], :] = labels.data
                 labels.data = temp.cuda()
             elif pseudo[0] < original[1]:
-                labels.data[i][0:pseudo[0], :] = pseudo_labels[pseudo_label_id].cuda()
+                labels.data[i][0:pseudo[0], :] = pseudo_labels[pseudo_label_id][0].cuda()
             else:
-                labels.data[i] = pseudo_labels[pseudo_label_id].cuda()
+                labels.data[i] = pseudo_labels[pseudo_label_id][0].cuda()
 
 
 if __name__ == '__main__':
