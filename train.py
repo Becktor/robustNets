@@ -44,7 +44,7 @@ def main(args=None):
 
     parser = parser.parse_args(args)
 
-    reweight_mods = {0: "0%", 2: "50%", 3: "33%", 4: "25%"}
+    reweight_mods = {0: "0%", 2: "50%", 3: "33%", 4: "25%", 10: "10%", 20: "20%"}
 
     reweight_mod = reweight_mods[parser.flip_mod]
     if parser.continue_training is not None:
@@ -60,7 +60,8 @@ def main(args=None):
             "train_set": parser.csv_train,
             "batch_size": parser.batch_size,
             "reweight_mod": reweight_mod,
-            "reanno": parser.reannotate
+            "reanno": parser.reannotate,
+            "total_epochs": parser.epochs,
         })
         wandb.run.name = "mod{}_rs{}_ra{}_{}".format(reweight_mod,
                                                      parser.rew_start,
@@ -68,7 +69,7 @@ def main(args=None):
                                                      wandb.run.id)
     config = wandb.config
     wandb_name = wandb.run.name
-
+    total_epochs = config.total_epochs
     """
     Data loaders
     """
@@ -249,7 +250,8 @@ def main(args=None):
             optimizer.step()
             if curr_epoch >= config.reweight:
                 if update_anno.sum() > 0:
-                    update_annotation(image, update_anno, idxs, crop_ids, model, pseudo_labels, curr_epoch)
+                    update_annotation(image, update_anno, idxs, crop_ids, model, pseudo_labels, curr_epoch,
+                                      total_epochs)
 
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             scheduler.step()
@@ -293,6 +295,10 @@ def main(args=None):
             print('Evaluating dataset')
 
             _ap, rl = csv_eval.evaluate(dataloader_val, model)
+            pl = 0
+            for key in pseudo_labels.keys():
+                if pseudo_labels[key][1] < curr_epoch-10:
+                    pl += 1
 
             # Write to Wandb
             wandb.log({"train/Epoch_runtime": runtime,
@@ -308,8 +314,8 @@ def main(args=None):
                        "mAP/mAP": rl['map'],
                        "mAP/mAP50": rl['map50'],
                        "lr/Learning Rate": lr,
-                       'train/epoch': curr_epoch})
-
+                       'train/epoch': curr_epoch,
+                       'train/pl': pl})
             checkpoint = {
                 'epoch': curr_epoch + 1,
                 'state_dict': model.state_dict(),
@@ -456,7 +462,7 @@ def add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, update_
                 update_anno[index] = True
 
 
-def update_annotation(image, update_anno, idxs, crop_ids, model, pseudo_labels, epoch):
+def update_annotation(image, update_anno, idxs, crop_ids, model, pseudo_labels, epoch, total_epochs):
     update_img = image[update_anno]
     update_names = np.array(idxs)[update_anno]
     update_crop_ids = np.array(crop_ids)[update_anno]
@@ -467,7 +473,7 @@ def update_annotation(image, update_anno, idxs, crop_ids, model, pseudo_labels, 
             cls = []
             bbx = []
             for j in range(len(score[i])):
-                score_thresh = min(.9, (epoch*2)/100 + 0.5)
+                score_thresh = max(.7, min(.9, 1 - (epoch / (total_epochs * 2) + 0.1)))
                 if score[i][j] > score_thresh:
                     c = classes[i][j]
                     b = bbox[i][j]
