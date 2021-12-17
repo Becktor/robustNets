@@ -13,50 +13,50 @@ def atoi(text):
 
 
 def natural_keys(text):
-    return [atoi(c) for c in re.split(r'(\d+)', text)]
+    return [atoi(c) for c in re.split(r"(\d+)", text)]
 
 
 def save_ckp(state, model, is_best, checkpoint_dir, epoch):
     if not os.path.exists(checkpoint_dir):
         os.mkdir(checkpoint_dir)
-    f_path = os.path.join(checkpoint_dir, 'checkpoint.pt')
+    f_path = os.path.join(checkpoint_dir, "checkpoint.pt")
     torch.save(state, f_path)
     if is_best:
-        best_filepath = os.path.join(checkpoint_dir, 'best_modelpt')
+        best_filepath = os.path.join(checkpoint_dir, "best_modelpt")
         torch.save(state, best_filepath)
 
 
 def load_ckp(checkpoint_filepath, model, optimizer=None, scheduler=None):
     cwd = os.path.join(os.getcwd(), checkpoint_filepath)
-    path = os.path.join(cwd, 'checkpoint.pt')
+    path = os.path.join(cwd, "checkpoint.pt")
     checkpoint = torch.load(path)
-    model.load_state_dict(checkpoint['state_dict'], strict=False)
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
     if optimizer is not None:
-        optimizer.load_state_dict(checkpoint['optimizer'])
-        scheduler.load_state_dict(checkpoint['scheduler'])
+        optimizer.load_state_dict(checkpoint["optimizer"])
+        scheduler.load_state_dict(checkpoint["scheduler"])
         return model, optimizer, scheduler, checkpoint
     return model
 
 
 def load_base_model(path, model):
     checkpoint = torch.load(path)
-    print("loading epoch: {}".format(checkpoint['epoch']))
-    model.load_state_dict(checkpoint['state_dict'], strict=False)
+    print("loading epoch: {}".format(checkpoint["epoch"]))
+    model.load_state_dict(checkpoint["state_dict"], strict=False)
     return model
 
 
 def load_best_ckp(checkpoint_filepath, model, optimizer):
     cwd = os.path.join(os.getcwd(), checkpoint_filepath)
-    path = os.path.join(cwd, 'best.pt')
+    path = os.path.join(cwd, "best.pt")
     checkpoint = torch.load(path)
-    model.load_state_dict(checkpoint['state_dict'])
-    optimizer.load_state_dict(checkpoint['optimizer'])
-    return model, optimizer, checkpoint['epoch']
+    model.load_state_dict(checkpoint["state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer"])
+    return model, optimizer, checkpoint["epoch"]
 
 
 def get_lr(optimizer):
     for param_group in optimizer.param_groups:
-        return param_group['lr']
+        return param_group["lr"]
 
 
 def to_var(x, requires_grad=True):
@@ -69,7 +69,8 @@ def count_parameters(model):
     table = PrettyTable(["Modules", "Parameters"])
     total_params = 0
     for name, parameter in model.named_parameters():
-        if not parameter.requires_grad: continue
+        if not parameter.requires_grad:
+            continue
         param = parameter.numel()
         table.add_row([name, param])
         total_params += param
@@ -91,8 +92,13 @@ def plot_input(v_image, v_labels, w_names, title="input"):
             if v[4] == 0:
                 color = (0, 0, 1)
 
-            img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
-                                 (int(v[2]), int(v[3])), color=color, thickness=2)
+            img2 = cv2.rectangle(
+                img2,
+                (int(v[0]), int(v[1])),
+                (int(v[2]), int(v[3])),
+                color=color,
+                thickness=2,
+            )
         plt.imshow(img2)
         plt.title(title + "-> Bouy is blue, boat is green indx: " + str(i))
         plt.show()
@@ -107,8 +113,13 @@ def plot_sample(img, lbl, title="input"):
         if v[4] == 0:
             color = (0, 0, 1)
 
-        img2 = cv2.rectangle(img2, (int(v[0]), int(v[1])),
-                             (int(v[2]), int(v[3])), color=color, thickness=2)
+        img2 = cv2.rectangle(
+            img2,
+            (int(v[0]), int(v[1])),
+            (int(v[2]), int(v[3])),
+            color=color,
+            thickness=2,
+        )
     plt.imshow(img2)
     plt.title(title + "-> Bouy is blue, boat is green")
     plt.show()

@@ -134,9 +134,12 @@ class CSVDataset(Dataset):
         # parse the provided class file
         try:
             with self._open_for_csv(self.class_list) as file:
-                self.classes = self.load_classes(csv.reader(file, delimiter=','))
+                self.classes = self.load_classes(csv.reader(file, delimiter=","))
         except ValueError as e:
-            raise_from(ValueError('invalid CSV class file: {}: {}'.format(self.class_list, e)), None)
+            raise_from(
+                ValueError("invalid CSV class file: {}: {}".format(self.class_list, e)),
+                None,
+            )
 
         self.labels = {}
         for key, value in self.classes.items():
@@ -145,16 +148,25 @@ class CSVDataset(Dataset):
         # csv with img_path, x1, y1, x2, y2, class_name
         try:
             with self._open_for_csv(self.train_file) as file:
-                self.image_data = self._read_annotations(csv.reader(file, delimiter=','), self.classes)
+                self.image_data = self._read_annotations(
+                    csv.reader(file, delimiter=","), self.classes
+                )
         except ValueError as e:
-            raise_from(ValueError('invalid CSV annotations file: {}: {}'.format(self.train_file, e)), None)
+            raise_from(
+                ValueError(
+                    "invalid CSV annotations file: {}: {}".format(self.train_file, e)
+                ),
+                None,
+            )
         self.image_names = list(self.image_data.keys())
 
         if not use_path:
             for x, image_name in enumerate(self.image_names):
                 dir_path = os.path.dirname(train_file)
                 filename = os.path.split(image_name)[-1]
-                img_path = os.path.join(os.path.join(dir_path, '2019_04_12_data'), filename)
+                img_path = os.path.join(
+                    os.path.join(dir_path, "2019_04_12_data"), filename
+                )
                 img_data = self.image_data[image_name]
                 del self.image_data[image_name]
                 self.image_names[x] = img_path
@@ -179,9 +191,9 @@ class CSVDataset(Dataset):
         for python3 this means 'r' with "universal newlines".
         """
         if sys.version_info[0] < 3:
-            return open(path, 'rb')
+            return open(path, "rb")
         else:
-            return open(path, 'r', newline='')
+            return open(path, "r", newline="")
 
     def load_classes(self, csv_reader):
         result = {}
@@ -192,11 +204,20 @@ class CSVDataset(Dataset):
             try:
                 class_name, class_id = row
             except ValueError:
-                raise_from(ValueError('line {}: format should be \'class_name,class_id\''.format(line)), None)
-            class_id = self._parse(class_id, int, 'line {}: malformed class ID: {{}}'.format(line))
+                raise_from(
+                    ValueError(
+                        "line {}: format should be 'class_name,class_id'".format(line)
+                    ),
+                    None,
+                )
+            class_id = self._parse(
+                class_id, int, "line {}: malformed class ID: {{}}".format(line)
+            )
 
             if class_name in result:
-                raise ValueError('line {}: duplicate class name: \'{}\''.format(line, class_name))
+                raise ValueError(
+                    "line {}: duplicate class name: '{}'".format(line, class_name)
+                )
             result[class_name] = class_id
         return result
 
@@ -247,10 +268,10 @@ class CSVDataset(Dataset):
         # parse annotations
         for idx, a in enumerate(annotation_list):
             # some annotations have basically no width / height, skip them
-            x1 = int(image_shape[1] * a['x1'])
-            x2 = int(image_shape[1] * a['x2'])
-            y1 = int(image_shape[0] * a['y1'])
-            y2 = int(image_shape[0] * a['y2'])
+            x1 = int(image_shape[1] * a["x1"])
+            x2 = int(image_shape[1] * a["x2"])
+            y1 = int(image_shape[0] * a["y1"])
+            y2 = int(image_shape[0] * a["y2"])
 
             if (x2 - x1) < 1 or (y2 - y1) < 1:
                 continue
@@ -262,7 +283,7 @@ class CSVDataset(Dataset):
             annotation[0, 2] = x2
             annotation[0, 3] = y2
 
-            annotation[0, 4] = self.name_to_label(a['class'])
+            annotation[0, 4] = self.name_to_label(a["class"])
             annotations = np.append(annotations, annotation, axis=0)
 
         return annotations
@@ -275,33 +296,48 @@ class CSVDataset(Dataset):
             try:
                 img_file, x1, y1, x2, y2, class_name = row[:6]
             except ValueError:
-                raise_from(ValueError(
-                    'line {}: format should be \'img_file,x1,y1,x2,y2,class_name\' or \'img_file,,,,,\''.format(line)),
-                    None)
+                raise_from(
+                    ValueError(
+                        "line {}: format should be 'img_file,x1,y1,x2,y2,class_name' or 'img_file,,,,,'".format(
+                            line
+                        )
+                    ),
+                    None,
+                )
 
             if img_file not in result:
                 result[img_file] = []
 
             # If a row contains only an image path, it's an image without annotations.
-            if (x1, y1, x2, y2, class_name) == ('', '', '', '', ''):
+            if (x1, y1, x2, y2, class_name) == ("", "", "", "", ""):
                 continue
 
-            x1 = self._parse(x1, float, 'line {}: malformed x1: {{}}'.format(line))
-            y1 = self._parse(y1, float, 'line {}: malformed y1: {{}}'.format(line))
-            x2 = self._parse(x2, float, 'line {}: malformed x2: {{}}'.format(line))
-            y2 = self._parse(y2, float, 'line {}: malformed y2: {{}}'.format(line))
+            x1 = self._parse(x1, float, "line {}: malformed x1: {{}}".format(line))
+            y1 = self._parse(y1, float, "line {}: malformed y1: {{}}".format(line))
+            x2 = self._parse(x2, float, "line {}: malformed x2: {{}}".format(line))
+            y2 = self._parse(y2, float, "line {}: malformed y2: {{}}".format(line))
 
             # Check that the bounding box is valid.
             if x2 <= x1:
-                raise ValueError('line {}: x2 ({}) must be higher than x1 ({})'.format(line, x2, x1))
+                raise ValueError(
+                    "line {}: x2 ({}) must be higher than x1 ({})".format(line, x2, x1)
+                )
             if y2 <= y1:
-                raise ValueError('line {}: y2 ({}) must be higher than y1 ({})'.format(line, y2, y1))
+                raise ValueError(
+                    "line {}: y2 ({}) must be higher than y1 ({})".format(line, y2, y1)
+                )
 
             # check if the current class name is correctly present
             if class_name not in classes:
-                raise ValueError('line {}: unknown class name: \'{}\' (classes: {})'.format(line, class_name, classes))
+                raise ValueError(
+                    "line {}: unknown class name: '{}' (classes: {})".format(
+                        line, class_name, classes
+                    )
+                )
 
-            result[img_file].append({'x1': x1, 'x2': x2, 'y1': y1, 'y2': y2, 'class': class_name})
+            result[img_file].append(
+                {"x1": x1, "x2": x2, "y1": y1, "y2": y2, "class": class_name}
+            )
         return result
 
     def name_to_label(self, name):
@@ -337,7 +373,7 @@ def collater(data):
 
     for i in range(batch_size):
         img = imgs[i]
-        padded_imgs[i, :int(img.shape[0]), :int(img.shape[1]), :] = img
+        padded_imgs[i, : int(img.shape[0]), : int(img.shape[1]), :] = img
 
     max_num_annots = max(annot.shape[0] for annot in annots)
 
@@ -349,14 +385,16 @@ def collater(data):
             for idx, annot in enumerate(annots):
                 # print(annot.shape)
                 if annot.shape[0] > 0:
-                    annot_padded[idx, :annot.shape[0], :] = annot
+                    annot_padded[idx, : annot.shape[0], :] = annot
     else:
         annot_padded = torch.ones((len(annots), 1, 5)) * -1
 
     padded_imgs = padded_imgs.permute(0, 3, 1, 2)
     collated_samples = []
     for i, img in enumerate(padded_imgs):
-        collated_samples.append(Sample(img, annot_padded[i], names[i], index[i], crop_ids[i]))
+        collated_samples.append(
+            Sample(img, annot_padded[i], names[i], index[i], crop_ids[i])
+        )
 
     batch = Batch(collated_samples)
     return batch
@@ -395,14 +433,15 @@ def crop_collater(data):
         sm1 = image[:, :rows, :]
         sm2 = image[:, cr:, :]
 
-        cropped_imgs = {0: (sm1, (0, 0, rows, rows)),
-                        1: (sm2, (cr, 0, rows, rows))}
+        cropped_imgs = {0: (sm1, (0, 0, rows, rows)), 1: (sm2, (cr, 0, rows, rows))}
 
         # Create small bbx
         for x in range(n):
             x_sp = x * x_increment
-            cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
-                                    x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
+            cropped_imgs[x + 2] = (
+                image[y_sp : y_sp + height :, x_sp : x_sp + width, :],
+                (x_sp, y_sp, width, height),
+            )
 
         sample_crops = {}
         scale = height / rows
@@ -449,11 +488,11 @@ def crop_collater(data):
 
         for i in range(len(new_crop)):
             img, an = new_crop[i]
-            torch_imgs[i, :int(img.shape[0]), :int(img.shape[1]), :] = img
+            torch_imgs[i, : int(img.shape[0]), : int(img.shape[1]), :] = img
 
             if max_num_annots > 0:
                 if len(an) > 0:
-                    torch_annots[i, :an.shape[0], :] = an
+                    torch_annots[i, : an.shape[0], :] = an
 
         torch_imgs = torch_imgs.permute(0, 3, 1, 2)
         for i in range(torch_imgs.shape[0]):
@@ -476,7 +515,10 @@ class Gaussian(object):
         image = sample.img
         annots = sample.annot
         if self.noise_level > 0:
-            image = image + torch.empty(image.shape).normal_(mean=0, std=self.noise_level).numpy()
+            image = (
+                image
+                + torch.empty(image.shape).normal_(mean=0, std=self.noise_level).numpy()
+            )
             image = np.clip(0, 1, image)
         # temp_img = (image * 255).astype(np.uint8)
         # Image.fromarray(temp_img).save("noisy.png")
@@ -486,7 +528,6 @@ class Gaussian(object):
 
 
 class GaussianBlur(object):
-
     def __init__(self, level):
         self.level = level
         self.blur = iaa.Sequential(iaa.blur.GaussianBlur(level))
@@ -518,7 +559,7 @@ class SAP(object):
         image = sample.img
         annots = sample.annot
         if self.per <= 0:
-            return {'img': image, 'annot': annots}
+            return {"img": image, "annot": annots}
         uint8_image = (image * 255).astype(np.uint8)
         # Image.fromarray(uint8_image).save("SP_inp.png")
         aug_image = self.sap(image=uint8_image)
@@ -548,7 +589,7 @@ class AddWeather(object):
         image = sample.img
         annots = sample.annot
         if self.weight < 0:
-            return {'img': image, 'annot': annots}
+            return {"img": image, "annot": annots}
         uint8_image = (image * 255).astype(np.uint8)
         # Image.fromarray(uint8_image).save("inp.png")
         aug_image = self.aug(image=uint8_image)
@@ -578,7 +619,7 @@ class Crop(object):
         image = sample.img
         annots = sample.annot
         name = sample.name
-        not_added=[]
+        not_added = []
         if image.shape[0] > 1080:
             scale = 1080 / image.shape[0]
             image = skimage.transform.resize(image, (1080, int(image.shape[1] * scale)))
@@ -598,14 +639,15 @@ class Crop(object):
         sm0 = image[:, :rows, :]
         sm1 = image[:, cr:, :]
 
-        cropped_imgs = {0: (sm0, (0, 0, rows, rows)),
-                        1: (sm1, (cr, 0, rows, rows))}
+        cropped_imgs = {0: (sm0, (0, 0, rows, rows)), 1: (sm1, (cr, 0, rows, rows))}
 
         # Create small bbx
         for x in range(n):
             x_sp = x * x_increment
-            cropped_imgs[x + 2] = ((image[y_sp:y_sp + height:,
-                                    x_sp:x_sp + width, :], (x_sp, y_sp, width, height)))
+            cropped_imgs[x + 2] = (
+                image[y_sp : y_sp + height :, x_sp : x_sp + width, :],
+                (x_sp, y_sp, width, height),
+            )
 
         sample_crops = {}
         scale = height / rows
@@ -620,8 +662,8 @@ class Crop(object):
                     n_y2 = n_y1 + sp[3] if y2 > sp[1] + sp[3] else y2 - sp[1]
 
                     anno = [n_x1, n_y1, n_x2, n_y2, lbl]
-                    area = (anno[2]-anno[0]) * (anno[3]-anno[1])
-                    #if area > 32:
+                    area = (anno[2] - anno[0]) * (anno[3] - anno[1])
+                    # if area > 32:
                     sample_crops.setdefault(key, []).append(anno)
                     # else:
                     #     not_added.append((key,area))
@@ -661,8 +703,13 @@ class Crop(object):
                 tmp_img = img
                 for v in annotations:
                     if (int(v[2]) - int(v[0])) * (int(v[3]) - int(v[1])) < 16:
-                        tmp_img = cv2.rectangle(img, (int(v[0]), int(v[1])),
-                                                (int(v[2]), int(v[3])), color=(0, 0, 1), thickness=2)
+                        tmp_img = cv2.rectangle(
+                            img,
+                            (int(v[0]), int(v[1])),
+                            (int(v[2]), int(v[3])),
+                            color=(0, 0, 1),
+                            thickness=2,
+                        )
                 plt.imshow(tmp_img)
                 plt.show()
         sample.img = img
@@ -694,7 +741,9 @@ class Resizer(object):
             scale = max_side / largest_side
 
         # resize the image with the computed scale
-        image = skimage.transform.resize(image, (int(round(rows * scale)), int(round((cols * scale)))))
+        image = skimage.transform.resize(
+            image, (int(round(rows * scale)), int(round((cols * scale))))
+        )
         rows, cols, cns = image.shape
         pad_w, pad_h = (0, 0)
         if rows % 32 != 0:
@@ -754,7 +803,7 @@ class LabelFlip(object):
         self._mod = mod
         self._alt = {}
 
-    def __call__(self, sample, flip_x=.5):
+    def __call__(self, sample, flip_x=0.5):
         image = sample.img
         annots = sample.annot
         idx = sample.index
@@ -777,13 +826,12 @@ class LabelFlip(object):
 
 
 class Normalizer(object):
-
     def __init__(self):
         self.mean = np.array([[[0.485, 0.456, 0.406]]])
         self.std = np.array([[[0.229, 0.224, 0.225]]])
 
     def __call__(self, sample):
-        sample.img = ((sample.img.astype(np.float32) - self.mean) / self.std)
+        sample.img = (sample.img.astype(np.float32) - self.mean) / self.std
         return sample
 
 
@@ -811,7 +859,6 @@ class UnNormalizer(object):
 
 
 class AspectRatioBasedSampler(Sampler):
-
     def __init__(self, data_source, batch_size, drop_last):
         self.data_source = data_source
         self.batch_size = batch_size
@@ -834,5 +881,7 @@ class AspectRatioBasedSampler(Sampler):
         order = list(range(len(self.data_source)))
 
         # divide into groups, one group = one batch
-        return [[order[x % len(order)] for x in range(i, i + self.batch_size)] for i in
-                range(0, len(order), self.batch_size)]
+        return [
+            [order[x % len(order)] for x in range(i, i + self.batch_size)]
+            for i in range(0, len(order), self.batch_size)
+        ]

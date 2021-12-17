@@ -2,7 +2,7 @@ import numpy as np
 
 
 def initialize_best_val(criterion):
-    if criterion == 'min':
+    if criterion == "min":
         return np.inf
     elif criterion == "max":
         return -np.inf

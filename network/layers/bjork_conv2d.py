@@ -2,19 +2,42 @@ import torch.nn.functional as F
 from torch.nn.modules.utils import _pair
 
 from network.layers.base_conv2d import BaseConv2D
-from network.utils.math.projections import bjorck_orthonormalize, get_safe_bjorck_scaling
+from network.utils.math.projections import (
+    bjorck_orthonormalize,
+    get_safe_bjorck_scaling,
+)
 
 
 class BjorckConv2d(BaseConv2D):
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1,
-                 padding=0, dilation=1, groups=1, bias=True, config=None):
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        bias=True,
+        config=None,
+    ):
         kernel_size = _pair(kernel_size)
         stride = _pair(stride)
         padding = _pair(padding)
         dilation = _pair(dilation)
         super(BaseConv2D, self).__init__(
-            in_channels, out_channels, kernel_size, stride, padding, dilation,
-            False, _pair(0), groups, bias, 'zeros')
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            padding,
+            dilation,
+            False,
+            _pair(0),
+            groups,
+            bias,
+            "zeros",
+        )
 
         self._set_config(config)
         self.original_shape = self.weight.shape
@@ -26,13 +49,25 @@ class BjorckConv2d(BaseConv2D):
     def forward(self, x):
         # Reshape and put in a matrix form.
 
-        flattened_weights = self.conv_form_to_matrix_form(self.weight, (self.out_channels, -1))
+        flattened_weights = self.conv_form_to_matrix_form(
+            self.weight, (self.out_channels, -1)
+        )
 
         # Orthonormalize. The scaling makes sure the singular values of the matrix are constrained by 1.
         scaling = get_safe_bjorck_scaling(flattened_weights, cuda=True)
         ortho_weight_flattened = bjorck_orthonormalize(flattened_weights / scaling)
 
         # Reshape back.
-        ortho_weights = self.matrix_form_to_conv_form(ortho_weight_flattened, self.original_shape)
+        ortho_weights = self.matrix_form_to_conv_form(
+            ortho_weight_flattened, self.original_shape
+        )
 
-        return F.conv1d(x, ortho_weights, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return F.conv1d(
+            x,
+            ortho_weights,
+            self.bias,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
+        )

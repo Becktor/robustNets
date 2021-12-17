@@ -12,5 +12,15 @@ def compute_jacobian(output, inputs, create_graph=True, retain_graph=True):
 
     # num_classes = output.size()[1]
 
-    return torch.stack([grad([output[:, i].sum()], [inputs], retain_graph=retain_graph, create_graph=create_graph)[0]
-                        for i in range(output.size(1))], dim=-1)
+    return torch.stack(
+        [
+            grad(
+                [output[:, i].sum()],
+                [inputs],
+                retain_graph=retain_graph,
+                create_graph=create_graph,
+            )[0]
+            for i in range(output.size(1))
+        ],
+        dim=-1,
+    )

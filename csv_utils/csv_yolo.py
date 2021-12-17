@@ -2,15 +2,17 @@ import os
 import csv
 
 IMAGE_SIZE = (1920, 1080)
-ship_buoy = {'buoy': 1,
-             'Buoy': 1,
-             'Motorboat': 0,
-             'Sailboat (D)': 0,
-             'Ferry': 0,
-             'Sailboat (U)': 0,
-             'Ship': 0,
-             'boat': 0,
-             '': -1}
+ship_buoy = {
+    "buoy": 1,
+    "Buoy": 1,
+    "Motorboat": 0,
+    "Sailboat (D)": 0,
+    "Ferry": 0,
+    "Sailboat (U)": 0,
+    "Ship": 0,
+    "boat": 0,
+    "": -1,
+}
 
 
 def box_to_pbox(box):
@@ -32,11 +34,11 @@ def x1x2y1y2xyhw(box):
 
 def convert(csv):
     name = os.path.basename(csv[0])[:-4]
-    if csv[2] == '':
-        return name, [-1,-1,-1,-1,-1]
+    if csv[2] == "":
+        return name, [-1, -1, -1, -1, -1]
 
     bbox = [float(i) for i in csv[1:5]]
-    #bbox = box_to_pbox(bbox)
+    # bbox = box_to_pbox(bbox)
     x, y, h, w = x1x2y1y2xyhw(bbox)
 
     label = ship_buoy[csv[5]]
@@ -44,7 +46,7 @@ def convert(csv):
 
 
 def main(fn):
-    with open(fn, mode='r') as file:
+    with open(fn, mode="r") as file:
         # reading the CSV file
         csvFile = csv.reader(file)
 
@@ -52,22 +54,22 @@ def main(fn):
         for lines in csvFile:
             name, tmp = convert(lines)
             l, x, y, h, w = tmp
-            if lines[2] == '':
+            if lines[2] == "":
                 continue
             else:
                 yolo = "{} {:06f} {:06f} {:06f} {:06f}\n".format(l, x, y, h, w)
             print("name: {} -- content {}".format(name, tmp))
-            pn = 'aalbarg_yolo'
+            pn = "aalbarg_yolo"
             if not os.path.exists(pn):
                 os.makedirs(pn)
-            n = os.path.join(pn, name + '.txt')
+            n = os.path.join(pn, name + ".txt")
             file2 = open(n, "a")
             file2.write(yolo)
             file2.close()
 
 
-if __name__ == '__main__':
-    #fn = r'Z:\Shippinglab\mmdet\rgb_train.csv'
-    #fn2 = r'Z:\Shippinglab\mmdet\weight_set.csv'
-    fn = r'C:\Users\Jobe\Documents\git\jobe.csv'
+if __name__ == "__main__":
+    # fn = r'Z:\Shippinglab\mmdet\rgb_train.csv'
+    # fn2 = r'Z:\Shippinglab\mmdet\weight_set.csv'
+    fn = r"C:\Users\Jobe\Documents\git\jobe.csv"
     main(fn)

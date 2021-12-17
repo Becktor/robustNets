@@ -11,12 +11,14 @@ class BasicBlock(MetaModule):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, act=nn.ReLU()):
         super(BasicBlock, self).__init__()
-        self.conv1 = MetaConv2d(inplanes, planes, kernel_size=3, stride=stride,
-                                padding=1, bias=False)
+        self.conv1 = MetaConv2d(
+            inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.bn1 = MetaBatchNorm2d(planes)
         self.act = act
-        self.conv2 = MetaConv2d(planes, planes, kernel_size=3, stride=1,
-                                padding=1, bias=False)
+        self.conv2 = MetaConv2d(
+            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.bn2 = MetaBatchNorm2d(planes)
         self.downsample = downsample
         self.stride = stride
@@ -45,11 +47,13 @@ class GroupBlock(MetaModule):
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, act=nn.ReLU()):
         super(BasicBlock, self).__init__()
-        self.conv1 = MetaConv2d(inplanes, planes, kernel_size=3, stride=stride,
-                                padding=1, bias=False)
+        self.conv1 = MetaConv2d(
+            inplanes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
         self.act = act
-        self.conv2 = MetaConv2d(planes, planes, kernel_size=3, stride=1,
-                                padding=1, bias=False)
+        self.conv2 = MetaConv2d(
+            planes, planes, kernel_size=3, stride=1, padding=1, bias=False
+        )
         self.downsample = downsample
         self.stride = stride
 
@@ -73,13 +77,16 @@ class GroupBlock(MetaModule):
 class Bottleneck(MetaModule):
     expansion = 4
 
-    def __init__(self, inplanes, planes, stride=1, downsample=None,
-                 act=GroupSort(2, axis=1)):
+    def __init__(
+        self, inplanes, planes, stride=1, downsample=None, act=GroupSort(2, axis=1)
+    ):
         super(Bottleneck, self).__init__()
 
         self.conv1 = MetaConv2d(inplanes, planes, kernel_size=1, bias=False)
 
-        self.conv2 = MetaConv2d(planes, planes, kernel_size=3, stride=stride, padding=1, bias=False)
+        self.conv2 = MetaConv2d(
+            planes, planes, kernel_size=3, stride=stride, padding=1, bias=False
+        )
 
         self.conv3 = MetaConv2d(planes, planes * 4, kernel_size=1, bias=False)
 
@@ -114,15 +121,18 @@ class Bottleneck(MetaModule):
 
 
 class BBoxTransform(nn.Module):
-
     def __init__(self, mean=None, std=None):
         super(BBoxTransform, self).__init__()
         if mean is None:
-            self.mean = torch.from_numpy(np.array([0, 0, 0, 0]).astype(np.float32)).cuda()
+            self.mean = torch.from_numpy(
+                np.array([0, 0, 0, 0]).astype(np.float32)
+            ).cuda()
         else:
             self.mean = mean
         if std is None:
-            self.std = torch.from_numpy(np.array([0.1, 0.1, 0.2, 0.2]).astype(np.float32)).cuda()
+            self.std = torch.from_numpy(
+                np.array([0.1, 0.1, 0.2, 0.2]).astype(np.float32)
+            ).cuda()
         else:
             self.std = std
 
@@ -148,13 +158,14 @@ class BBoxTransform(nn.Module):
         pred_boxes_x2 = pred_ctr_x + 0.5 * pred_w
         pred_boxes_y2 = pred_ctr_y + 0.5 * pred_h
 
-        pred_boxes = torch.stack([pred_boxes_x1, pred_boxes_y1, pred_boxes_x2, pred_boxes_y2], dim=2)
+        pred_boxes = torch.stack(
+            [pred_boxes_x1, pred_boxes_y1, pred_boxes_x2, pred_boxes_y2], dim=2
+        )
 
         return pred_boxes
 
 
 class ClipBoxes(nn.Module):
-
     def __init__(self, width=None, height=None):
         super(ClipBoxes, self).__init__()
 

@@ -99,7 +99,7 @@ class Hist:
             self.eval(g, box[0], 0)
             self.eval(g, box[1], 1)
 
-    def show_hist(self, xrange=3000, lbl=-1, name='', f=None):
+    def show_hist(self, xrange=3000, lbl=-1, name="", f=None):
         if lbl < 0:
             tp = self.TP[0] + self.TP[1]
             fp = self.FP[0] + self.FP[1]
@@ -119,17 +119,32 @@ class Hist:
         w.fill(1 / (sumDetections + 1e-8))
 
         # make histogram for TP
-        ax1.hist(np.array(tp), bins=100, weights=w, density=0, cumulative=0, alpha=0.5,
-                 label='Detected',
-                 range=(0, xrange))
+        ax1.hist(
+            np.array(tp),
+            bins=100,
+            weights=w,
+            density=0,
+            cumulative=0,
+            alpha=0.5,
+            label="Detected",
+            range=(0, xrange),
+        )
 
         # Create FN scaling weights
         w = np.empty(np.array(fn).shape[0])
         w.fill(1 / (sumDetections + 1e-8))
 
         # create histogram for FN
-        ax1.hist(np.array(fn), bins=100, weights=w, density=0, cumulative=0, alpha=0.5,
-                 label='Not Detected', range=(0, xrange))
+        ax1.hist(
+            np.array(fn),
+            bins=100,
+            weights=w,
+            density=0,
+            cumulative=0,
+            alpha=0.5,
+            label="Not Detected",
+            range=(0, xrange),
+        )
 
         # combine the x-axis of the two histograms
         ax2 = ax1.twinx()
@@ -152,14 +167,14 @@ class Hist:
                 x_new.append(b)
                 y_new.append(r)
             if r >= 0.5 and (n1_old + n2_old) > 10 and allowPrint:
-                print('Recall of 0.5 achieved at a minimum pixel area of ', b, file=f)
+                print("Recall of 0.5 achieved at a minimum pixel area of ", b, file=f)
                 allowPrint = False
 
         for x, y in zip(x_new, y_new):
             if y > 0.9 * np.max(y_new):
-                print('90% of maximum recall achieved at pixel area of ', x, file=f)
+                print("90% of maximum recall achieved at pixel area of ", x, file=f)
                 break
-        ax2.plot(x_new, y_new, linewidth=2, c='lime', label='Recall')
+        ax2.plot(x_new, y_new, linewidth=2, c="lime", label="Recall")
 
         # extract bins + numbers for stepped precision curve
 
@@ -178,7 +193,7 @@ class Hist:
                 x_new.append(b)
                 y_new.append(r)
 
-        ax2.plot(x_new, y_new, linewidth=2, c='g', label='Precision')
+        ax2.plot(x_new, y_new, linewidth=2, c="g", label="Precision")
 
         # make axis limits + legends
         ax2.set_ylim([0, 1.1])
@@ -186,31 +201,62 @@ class Hist:
         ax2.set_xlim([0, xrange])
         ax1.set_xlim([0, xrange])
 
-        ax2.legend(loc='lower left', bbox_to_anchor=(0.55, 1.0), ncol=2,
-                   borderaxespad=0, frameon=False)
-        ax1.legend(loc='lower right', bbox_to_anchor=(0.55, 1.0), ncol=2,
-                   borderaxespad=0, frameon=False)
+        ax2.legend(
+            loc="lower left",
+            bbox_to_anchor=(0.55, 1.0),
+            ncol=2,
+            borderaxespad=0,
+            frameon=False,
+        )
+        ax1.legend(
+            loc="lower right",
+            bbox_to_anchor=(0.55, 1.0),
+            ncol=2,
+            borderaxespad=0,
+            frameon=False,
+        )
 
-        ax1.set_title(name + ' Detection Histogram', loc='center', y=1.07)
-        ax1.set_ylabel('Density')
-        ax2.set_ylabel('Value')
-        ax1.set_xlabel('Object Area [Pixels]')
+        ax1.set_title(name + " Detection Histogram", loc="center", y=1.07)
+        ax1.set_ylabel("Density")
+        ax2.set_ylabel("Value")
+        ax1.set_xlabel("Object Area [Pixels]")
         ax1.minorticks_on()
-        ax1.grid(which='minor', linestyle=':', linewidth='0.5', color='black', alpha=0.5)
-        ax1.grid(which='major', linestyle='-', linewidth='0.5', color='black', alpha=0.5)
+        ax1.grid(
+            which="minor", linestyle=":", linewidth="0.5", color="black", alpha=0.5
+        )
+        ax1.grid(
+            which="major", linestyle="-", linewidth="0.5", color="black", alpha=0.5
+        )
         fig.tight_layout()
         plt.show()
-        fig.savefig('../figures/' + name + '_hist.png')
+        fig.savefig("../figures/" + name + "_hist.png")
 
 
 def main(args=None):
-    parser = argparse.ArgumentParser(description='Program for showing detection histogram')
-    parser.add_argument('--csv_classes', help='Path to file containing class list (see readme)')
-    parser.add_argument('--csv_val', help='Path to file containing validation annotations (optional, see readme)')
-    parser.add_argument('--model', help='Path to model (.pt) file.')
-    parser.add_argument("-t", "--title", help="figure title name", type=str, default='Test')
-    parser.add_argument("-iou", "--iouThresh", help="Evaluation iou threshold", type=float, default=0.3)
-    parser.add_argument("-conf", "--confThresh", help="Evaluation confidence threshold", type=float, default=0.5)
+    parser = argparse.ArgumentParser(
+        description="Program for showing detection histogram"
+    )
+    parser.add_argument(
+        "--csv_classes", help="Path to file containing class list (see readme)"
+    )
+    parser.add_argument(
+        "--csv_val",
+        help="Path to file containing validation annotations (optional, see readme)",
+    )
+    parser.add_argument("--model", help="Path to model (.pt) file.")
+    parser.add_argument(
+        "-t", "--title", help="figure title name", type=str, default="Test"
+    )
+    parser.add_argument(
+        "-iou", "--iouThresh", help="Evaluation iou threshold", type=float, default=0.3
+    )
+    parser.add_argument(
+        "-conf",
+        "--confThresh",
+        help="Evaluation confidence threshold",
+        type=float,
+        default=0.5,
+    )
     parser = parser.parse_args(args)
 
     model = torch.load(parser.model)
@@ -227,24 +273,38 @@ def main(args=None):
         model = torch.nn.DataParallel(model)
 
     model.eval()
-    f = open("{}_log.txt".format(model_name), 'w')
-    weights = [-1]#, (0.01, 0.02)]#, (0.05, 0.11), (0.1, 0.2)]
+    f = open("{}_log.txt".format(model_name), "w")
+    weights = [-1]  # , (0.01, 0.02)]#, (0.05, 0.11), (0.1, 0.2)]
     for weight in weights:
-        #seq = iaa.Sequential(iaa.Rain(drop_size=weight), seed=1)
+        # seq = iaa.Sequential(iaa.Rain(drop_size=weight), seed=1)
 
-        #noises = [0.0001, 0.0005, 0.001] #Gaussian salt/pepper
-        #noises = [1, 1.5, 2]
+        # noises = [0.0001, 0.0005, 0.001] #Gaussian salt/pepper
+        # noises = [1, 1.5, 2]
         noises = [0.0, 0.025, 0.05, 0.075]
         for noise in noises:
-            dataset_val = CSVDataset(train_file=parser.csv_val, class_list=parser.csv_classes,
-                                     transform=transforms.Compose([Gaussian(noise), Resizer()]))
+            dataset_val = CSVDataset(
+                train_file=parser.csv_val,
+                class_list=parser.csv_classes,
+                transform=transforms.Compose([Gaussian(noise), Resizer()]),
+            )
 
-            print("++++++++++++ noise level at: {} weight: {} ++++++++++++".format(noise, weight))
-            all_detections = get_detections(dataset_val, model, score_threshold=parser.confThresh,
-                                            max_detections=100, noise_level=noise)
+            print(
+                "++++++++++++ noise level at: {} weight: {} ++++++++++++".format(
+                    noise, weight
+                )
+            )
+            all_detections = get_detections(
+                dataset_val,
+                model,
+                score_threshold=parser.confThresh,
+                max_detections=100,
+                noise_level=noise,
+            )
             all_annotations = get_annotations(dataset_val)
 
-            hist_class = Hist(all_detections, all_annotations, parser.iouThresh, parser.confThresh)
+            hist_class = Hist(
+                all_detections, all_annotations, parser.iouThresh, parser.confThresh
+            )
             hist_class.run()
             if weight < 0:
                 name_suffix = "_n_{}".format(noise)
@@ -253,11 +313,25 @@ def main(args=None):
             else:
                 name_suffix = "_n_{}_ww_{}".format(noise, weight)
 
-            hist_class.show_hist(3000, name='{}_BB{}'.format(model_name, name_suffix), f=f)
-            hist_class.show_hist(3000, lbl=0, name='{}_Buoy{}'.format(model_name, name_suffix), f=f)
-            hist_class.show_hist(3000, lbl=1, name='{}_Boat{}'.format(model_name, name_suffix), f=f)
-            evaluate(dataset_val, model, noise=noise, iou_threshold=0.3, score_threshold=parser.confThresh,
-                     detections=all_detections, annotations=all_annotations, plot=True)
+            hist_class.show_hist(
+                3000, name="{}_BB{}".format(model_name, name_suffix), f=f
+            )
+            hist_class.show_hist(
+                3000, lbl=0, name="{}_Buoy{}".format(model_name, name_suffix), f=f
+            )
+            hist_class.show_hist(
+                3000, lbl=1, name="{}_Boat{}".format(model_name, name_suffix), f=f
+            )
+            evaluate(
+                dataset_val,
+                model,
+                noise=noise,
+                iou_threshold=0.3,
+                score_threshold=parser.confThresh,
+                detections=all_detections,
+                annotations=all_annotations,
+                plot=True,
+            )
 
 
 if __name__ == "__main__":

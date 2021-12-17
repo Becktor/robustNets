@@ -12,24 +12,23 @@ class Maxout(Activation):
         return maxout(x, self.num_units, self.axis)
 
     def extra_repr(self):
-        return 'num_units: {}'.format(self.num_units)
+        return "num_units: {}".format(self.num_units)
 
 
 class MaxMin(Activation):
-
     def __init__(self, axis=-1):
         super(MaxMin, self).__init__()
         self.axis = axis
 
     def forward(self, x):
-        num_units = int(x.size()[self.axis]/2)
+        num_units = int(x.size()[self.axis] / 2)
         maxes = maxout(x, num_units, self.axis)
         mins = minout(x, num_units, self.axis)
         maxmin = torch.cat((maxes, mins), dim=1)
         return maxmin
 
     def extra_repr(self):
-        return 'num_units: {}'.format(self.num_units)
+        return "num_units: {}".format(self.num_units)
 
 
 def process_maxmin_size(x, num_units, axis=-1):
@@ -37,13 +36,15 @@ def process_maxmin_size(x, num_units, axis=-1):
     num_channels = size[axis]
 
     if num_channels % num_units:
-        raise ValueError('number of features({}) is not a '
-                         'multiple of num_units({})'.format(num_channels, num_units))
+        raise ValueError(
+            "number of features({}) is not a "
+            "multiple of num_units({})".format(num_channels, num_units)
+        )
     size[axis] = -1
     if axis == -1:
         size += [num_channels // num_units]
     else:
-        size.insert(axis+1, num_channels // num_units)
+        size.insert(axis + 1, num_channels // num_units)
     return size
 
 

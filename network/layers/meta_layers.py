@@ -19,27 +19,29 @@ class MetaModule(nn.Module):
     def named_submodules(self):
         return []
 
-    def named_params(self, curr_module=None, memo=None, prefix=''):
+    def named_params(self, curr_module=None, memo=None, prefix=""):
         if memo is None:
             memo = set()
 
-        if hasattr(curr_module, 'named_leaves'):
+        if hasattr(curr_module, "named_leaves"):
             for name, p in curr_module.named_leaves():
                 if p is not None and p not in memo:
                     memo.add(p)
-                    yield prefix + ('.' if prefix else '') + name, p
+                    yield prefix + ("." if prefix else "") + name, p
         else:
             for name, p in curr_module._parameters.items():
                 if p is not None and p not in memo:
                     memo.add(p)
-                    yield prefix + ('.' if prefix else '') + name, p
+                    yield prefix + ("." if prefix else "") + name, p
 
         for mname, module in curr_module.named_children():
-            submodule_prefix = prefix + ('.' if prefix else '') + mname
+            submodule_prefix = prefix + ("." if prefix else "") + mname
             for name, p in self.named_params(module, memo, submodule_prefix):
                 yield name, p
 
-    def update_params(self, lr_inner, first_order=False, source_params=None, detach=False):
+    def update_params(
+        self, lr_inner, first_order=False, source_params=None, detach=False
+    ):
         if source_params is not None:
             for tgt, src in zip(self.named_params(self), source_params):
                 name_t, param_t = tgt
@@ -65,16 +67,16 @@ class MetaModule(nn.Module):
                     self.set_param(self, name, param)
 
     def set_param(self, curr_mod, name, param):
-        if '.' in name:
-            n = name.split('.')
+        if "." in name:
+            n = name.split(".")
             module_name = n[0]
-            rest = '.'.join(n[1:])
+            rest = ".".join(n[1:])
             for name, mod in curr_mod.named_children():
                 if module_name == name:
                     self.set_param(mod, rest, param)
                     break
         else:
-            #w = torch.nn.Parameter(param)
+            # w = torch.nn.Parameter(param)
             setattr(curr_mod, name, param)
 
     def detach_params(self):
@@ -93,14 +95,14 @@ class MetaLinear(MetaModule):
         super().__init__()
         ignore = nn.Linear(*args, **kwargs)
 
-        self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
-        self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
+        self.register_buffer("weight", to_var(ignore.weight.data, requires_grad=True))
+        self.register_buffer("bias", to_var(ignore.bias.data, requires_grad=True))
 
     def forward(self, x):
         return F.linear(x, self.weight, self.bias)
 
     def named_leaves(self):
-        return [('weight', self.weight), ('bias', self.bias)]
+        return [("weight", self.weight), ("bias", self.bias)]
 
 
 class MetaConv2d(MetaModule):
@@ -114,18 +116,26 @@ class MetaConv2d(MetaModule):
         self.groups = ignore.groups
         self.out_channels = ignore.out_channels
 
-        self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
+        self.register_buffer("weight", to_var(ignore.weight.data, requires_grad=True))
 
         if ignore.bias is not None:
-            self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
+            self.register_buffer("bias", to_var(ignore.bias.data, requires_grad=True))
         else:
-            self.register_buffer('bias', None)
+            self.register_buffer("bias", None)
 
     def forward(self, x):
-        return F.conv2d(x, self.weight, self.bias, self.stride, self.padding, self.dilation, self.groups)
+        return F.conv2d(
+            x,
+            self.weight,
+            self.bias,
+            self.stride,
+            self.padding,
+            self.dilation,
+            self.groups,
+        )
 
     def named_leaves(self):
-        return [('weight', self.weight), ('bias', self.bias)]
+        return [("weight", self.weight), ("bias", self.bias)]
 
     def out_channels(self):
         return self.out_channels
@@ -141,20 +151,28 @@ class MetaConvTranspose2d(MetaModule):
         self.dilation = ignore.dilation
         self.groups = ignore.groups
 
-        self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
+        self.register_buffer("weight", to_var(ignore.weight.data, requires_grad=True))
 
         if ignore.bias is not None:
-            self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
+            self.register_buffer("bias", to_var(ignore.bias.data, requires_grad=True))
         else:
-            self.register_buffer('bias', None)
+            self.register_buffer("bias", None)
 
     def forward(self, x, output_size=None):
         output_padding = self._output_padding(x, output_size)
-        return F.conv_transpose2d(x, self.weight, self.bias, self.stride, self.padding,
-                                  output_padding, self.groups, self.dilation)
+        return F.conv_transpose2d(
+            x,
+            self.weight,
+            self.bias,
+            self.stride,
+            self.padding,
+            output_padding,
+            self.groups,
+            self.dilation,
+        )
 
     def named_leaves(self):
-        return [('weight', self.weight), ('bias', self.bias)]
+        return [("weight", self.weight), ("bias", self.bias)]
 
 
 class MetaBatchNorm2d(MetaModule):
@@ -169,16 +187,20 @@ class MetaBatchNorm2d(MetaModule):
         self.track_running_stats = ignore.track_running_stats
 
         if self.affine:
-            self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
-            self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
+            self.register_buffer(
+                "weight", to_var(ignore.weight.data, requires_grad=True)
+            )
+            self.register_buffer("bias", to_var(ignore.bias.data, requires_grad=True))
 
         if self.track_running_stats:
-            self.register_buffer('running_mean', torch.zeros(self.num_features))
-            self.register_buffer('running_var', torch.ones(self.num_features))
-            self.register_buffer('num_batches_tracked', torch.tensor(0, dtype=torch.long))
+            self.register_buffer("running_mean", torch.zeros(self.num_features))
+            self.register_buffer("running_var", torch.ones(self.num_features))
+            self.register_buffer(
+                "num_batches_tracked", torch.tensor(0, dtype=torch.long)
+            )
         else:
-            self.register_parameter('running_mean', None)
-            self.register_parameter('running_var', None)
+            self.register_parameter("running_mean", None)
+            self.register_parameter("running_var", None)
 
     def reset_running_stats(self):
         if self.track_running_stats:
@@ -194,8 +216,7 @@ class MetaBatchNorm2d(MetaModule):
 
     def _check_input_dim(self, input):
         if input.dim() != 4:
-            raise ValueError('expected 4D input (got {}D input)'
-                             .format(input.dim()))
+            raise ValueError("expected 4D input (got {}D input)".format(input.dim()))
 
     def forward(self, x):
         self._check_input_dim(x)
@@ -208,30 +229,54 @@ class MetaBatchNorm2d(MetaModule):
             else:  # use exponential moving average
                 exponential_average_factor = self.momentum
 
-        return F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
-                            self.training or not self.track_running_stats, self.momentum, self.eps)
+        return F.batch_norm(
+            x,
+            self.running_mean,
+            self.running_var,
+            self.weight,
+            self.bias,
+            self.training or not self.track_running_stats,
+            self.momentum,
+            self.eps,
+        )
 
     def named_leaves(self):
-        return [('weight', self.weight), ('bias', self.bias)]
+        return [("weight", self.weight), ("bias", self.bias)]
 
     def extra_repr(self):
-        return '{num_features}, eps={eps}, momentum={momentum}, affine={affine}, ' \
-               'track_running_stats={track_running_stats}'.format(**self.__dict__)
+        return (
+            "{num_features}, eps={eps}, momentum={momentum}, affine={affine}, "
+            "track_running_stats={track_running_stats}".format(**self.__dict__)
+        )
 
-    def _load_from_state_dict(self, state_dict, prefix, metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        version = metadata.get('version', None)
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        version = metadata.get("version", None)
 
         if (version is None or version < 2) and self.track_running_stats:
             # at version 2: added num_batches_tracked buffer
             #               this should have a default value of 0
-            num_batches_tracked_key = prefix + 'num_batches_tracked'
+            num_batches_tracked_key = prefix + "num_batches_tracked"
             if num_batches_tracked_key not in state_dict:
                 state_dict[num_batches_tracked_key] = torch.tensor(0, dtype=torch.long)
 
         super(MetaBatchNorm2d, self)._load_from_state_dict(
-            state_dict, prefix, metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
+            state_dict,
+            prefix,
+            metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
 
 
 class MetaBatchNorm1d(MetaModule):
@@ -246,16 +291,20 @@ class MetaBatchNorm1d(MetaModule):
         self.track_running_stats = ignore.track_running_stats
 
         if self.affine:
-            self.register_buffer('weight', to_var(ignore.weight.data, requires_grad=True))
-            self.register_buffer('bias', to_var(ignore.bias.data, requires_grad=True))
+            self.register_buffer(
+                "weight", to_var(ignore.weight.data, requires_grad=True)
+            )
+            self.register_buffer("bias", to_var(ignore.bias.data, requires_grad=True))
 
         if self.track_running_stats:
-            self.register_buffer('running_mean', torch.zeros(self.num_features))
-            self.register_buffer('running_var', torch.ones(self.num_features))
-            self.register_buffer('num_batches_tracked', torch.tensor(0, dtype=torch.long))
+            self.register_buffer("running_mean", torch.zeros(self.num_features))
+            self.register_buffer("running_var", torch.ones(self.num_features))
+            self.register_buffer(
+                "num_batches_tracked", torch.tensor(0, dtype=torch.long)
+            )
         else:
-            self.register_parameter('running_mean', None)
-            self.register_parameter('running_var', None)
+            self.register_parameter("running_mean", None)
+            self.register_parameter("running_var", None)
 
     def reset_running_stats(self):
         if self.track_running_stats:
@@ -271,8 +320,9 @@ class MetaBatchNorm1d(MetaModule):
 
     def _check_input_dim(self, input):
         if input.dim() != 2 and input.dim() != 3:
-            raise ValueError('expected 2D or 3D input (got {}D input)'
-                             .format(input.dim()))
+            raise ValueError(
+                "expected 2D or 3D input (got {}D input)".format(input.dim())
+            )
 
     def forward(self, x):
         self._check_input_dim(x)
@@ -285,27 +335,51 @@ class MetaBatchNorm1d(MetaModule):
             else:  # use exponential moving average
                 exponential_average_factor = self.momentum
 
-        return F.batch_norm(x, self.running_mean, self.running_var, self.weight, self.bias,
-                            self.training or not self.track_running_stats, self.momentum, self.eps)
+        return F.batch_norm(
+            x,
+            self.running_mean,
+            self.running_var,
+            self.weight,
+            self.bias,
+            self.training or not self.track_running_stats,
+            self.momentum,
+            self.eps,
+        )
 
     def named_leaves(self):
-        return [('weight', self.weight), ('bias', self.bias)]
+        return [("weight", self.weight), ("bias", self.bias)]
 
     def extra_repr(self):
-        return '{num_features}, eps={eps}, momentum={momentum}, affine={affine}, ' \
-               'track_running_stats={track_running_stats}'.format(**self.__dict__)
+        return (
+            "{num_features}, eps={eps}, momentum={momentum}, affine={affine}, "
+            "track_running_stats={track_running_stats}".format(**self.__dict__)
+        )
 
-    def _load_from_state_dict(self, state_dict, prefix, metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
-        version = metadata.get('version', None)
+    def _load_from_state_dict(
+        self,
+        state_dict,
+        prefix,
+        metadata,
+        strict,
+        missing_keys,
+        unexpected_keys,
+        error_msgs,
+    ):
+        version = metadata.get("version", None)
 
         if (version is None or version < 2) and self.track_running_stats:
             # at version 2: added num_batches_tracked buffer
             #               this should have a default value of 0
-            num_batches_tracked_key = prefix + 'num_batches_tracked'
+            num_batches_tracked_key = prefix + "num_batches_tracked"
             if num_batches_tracked_key not in state_dict:
                 state_dict[num_batches_tracked_key] = torch.tensor(0, dtype=torch.long)
 
         super(MetaBatchNorm1d, self)._load_from_state_dict(
-            state_dict, prefix, metadata, strict,
-            missing_keys, unexpected_keys, error_msgs)
+            state_dict,
+            prefix,
+            metadata,
+            strict,
+            missing_keys,
+            unexpected_keys,
+            error_msgs,
+        )
