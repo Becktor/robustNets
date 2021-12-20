@@ -7,7 +7,7 @@ wandb/
 network/*.png
 network/*.txt
 outfiles/
-runscripts/
+runscripts/*
 #file
 *.pth
 *.csv
