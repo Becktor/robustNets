@@ -103,9 +103,15 @@ def main(args=None):
         wandb.run.name = "mod{}_rs{}_ra{}_{}".format(
             reweight_mod, parser.rew_start, parser.reannotate, wandb.run.id
         )
+    
+
     config = wandb.config
     wandb_name = wandb.run.name
-    total_epochs = config.total_epochs
+    if 'total_epochs' in config:
+        total_epochs = config.total_epochs
+    else:
+        #wandb.config['total_epochs']=parser.epochs
+	total_epochs = parser.epochs
     """
     Data loaders
     """
