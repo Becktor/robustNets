@@ -6,6 +6,7 @@ figures/
 wandb/
 network/*.png
 network/*.txt
+data/
 #file
 *.pth
 *.csv
