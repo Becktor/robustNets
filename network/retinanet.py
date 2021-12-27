@@ -8,7 +8,7 @@ from torchvision.ops import nms, batched_nms
 from network import losses
 from network.anchors import Anchors
 from network.utils import BasicBlock, Bottleneck, BBoxTransform, ClipBoxes
-from network.layers.meta_layers import MetaBatchNorm2d, MetaConv2d, MetaModule
+from network.layers.meta_layers import MetaBatchNorm2d, MetaConv2d, MetaModule, MetaLinear
 
 model_urls = {
     "resnet18": "https://download.pytorch.org/models/resnet18-5c106cde.pth",
@@ -599,3 +599,34 @@ def resnet152(num_classes, pretrained=False, **kwargs):
             model_zoo.load_url(model_urls["resnet152"], model_dir="."), strict=False
         )
     return model
+
+
+class LeNet(MetaModule):
+    def __init__(self, n_out):
+        super(LeNet, self).__init__()
+
+        layers = []
+        layers.append(MetaConv2d(1, 10, kernel_size=5))
+        layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+
+        layers.append(MetaConv2d(10, 20, kernel_size=5))
+        layers.append(nn.ReLU(inplace=True))
+        layers.append(nn.MaxPool2d(kernel_size=2, stride=2))
+
+        layers.append(MetaConv2d(20, 120, kernel_size=5))
+        layers.append(nn.ReLU(inplace=True))
+
+        self.main = nn.Sequential(*layers)
+
+        layers = []
+        layers.append(MetaLinear(120, 84))
+        layers.append(nn.ReLU(inplace=True))
+        layers.append(MetaLinear(84, n_out))
+
+        self.fc_layers = nn.Sequential(*layers)
+
+    def forward(self, x):
+        x = self.main(x)
+        x = x.view(-1, 120)
+        return self.fc_layers(x)

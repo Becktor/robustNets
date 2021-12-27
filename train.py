@@ -84,6 +84,7 @@ def main(args=None):
     if parser.continue_training is not None:
         wandb_id = parser.continue_training[-8:]
         wandb.init(project="Re-Annotation", id=wandb_id, resume=True)
+        wandb.config.batch_size=parser.batch_size
     else:
         wandb.init(
             project="Re-Annotation",
@@ -175,7 +176,7 @@ def main(args=None):
             v_image, v_labels, w_names, idx = weighted_data
             for x in range(v_image.shape[0]):
                 tmp = torch.ones((max_shape, 5)) * -1
-                tmp[0 : v_labels[x].shape[0], :] = v_labels[x]
+                tmp[0: v_labels[x].shape[0], :] = v_labels[x]
                 if idx[x] in weighted_dataset_in_mem:
                     weighted_dataset_in_mem[idx[x]].append(
                         (v_image[x], tmp.cuda(), w_names[x], idx[x])
@@ -621,7 +622,7 @@ def update_annotation(
             bbx = []
             for j in range(len(score[i])):
                 score_thresh = max(
-                    0.7, min(0.9, 1 - (epoch / (total_epochs * 2) + 0.1))
+                    0.8, min(0.95, 1 - (epoch / (total_epochs * 5)))
                 )
                 if score[i][j] > score_thresh:
                     c = classes[i][j]
