@@ -84,7 +84,7 @@ def main(args=None):
     if parser.continue_training is not None:
         wandb_id = parser.continue_training[-8:]
         wandb.init(project="Re-Annotation", id=wandb_id, resume=True)
-        wandb.config.batch_size=parser.batch_size
+        wandb.config.batch_size = parser.batch_size
     else:
         wandb.init(
             project="Re-Annotation",
@@ -233,7 +233,7 @@ def main(args=None):
     scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
         optimizer, n_iters * wr, 2
     )
-
+    score_thresh = 1.0
     prev_epoch = 0
     if parser.continue_training is not None:
         model, optimizer, scheduler, checkpoint_dict = load_ckp(
@@ -339,6 +339,8 @@ def main(args=None):
             optimizer.zero_grad(set_to_none=True)
             loss.backward()
             optimizer.step()
+
+            score_thresh = max(0.8, min(0.95, 1 - (curr_epoch / (total_epochs * 5))))
             if curr_epoch >= config.reweight:
                 if update_anno.sum() > 0:
                     update_annotation(
@@ -350,6 +352,7 @@ def main(args=None):
                         pseudo_labels,
                         curr_epoch,
                         total_epochs,
+                        score_thresh
                     )
 
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
@@ -421,6 +424,8 @@ def main(args=None):
                     "lr/Learning Rate": lr,
                     "train/epoch": curr_epoch,
                     "train/pl": pl,
+                    "re_anno/pl": pl,
+                    "re_anno/score_thresh": score_thresh
                 }
             )
             checkpoint = {
@@ -467,19 +472,19 @@ def get_random_weighting_sample(weight_samples_dict, batch_size):
 
 
 def reweight_loop(
-    model,
-    optimizer,
-    image,
-    labels,
-    parser,
-    val_sample,
-    m_epoch_loss,
-    reweight_cases,
-    names,
-    trans,
-    crop_ids,
-    altered_labels,
-    cost,
+        model,
+        optimizer,
+        image,
+        labels,
+        parser,
+        val_sample,
+        m_epoch_loss,
+        reweight_cases,
+        names,
+        trans,
+        crop_ids,
+        altered_labels,
+        cost,
 ):
     with higher.innerloop_ctx(model, optimizer) as (meta_model, meta_opt):
         # y_f_hat = meta_net(image)
@@ -528,19 +533,19 @@ def reweight_loop(
 
 
 def reweight_loop_old(
-    model,
-    lr,
-    image,
-    labels,
-    val_sample,
-    m_epoch_loss,
-    zero_tensor,
-    zero_loss,
-    reweight_cases,
-    names,
-    cost,
-    dataset_train,
-    update_anno,
+        model,
+        lr,
+        image,
+        labels,
+        val_sample,
+        m_epoch_loss,
+        zero_tensor,
+        zero_loss,
+        reweight_cases,
+        names,
+        cost,
+        dataset_train,
+        update_anno,
 ):
     meta_model = retinanet.resnet50(num_classes=dataset_train.num_classes())
     meta_model.load_state_dict(model.state_dict())
@@ -609,7 +614,7 @@ def add_reweight_cases_to_update_anno_dict(w, wl, reweight_cases, names, update_
 
 
 def update_annotation(
-    image, update_anno, idxs, crop_ids, model, pseudo_labels, epoch, total_epochs
+        image, update_anno, idxs, crop_ids, model, pseudo_labels, epoch, total_epochs, score_thresh
 ):
     update_img = image[update_anno]
     update_names = np.array(idxs)[update_anno]
@@ -621,9 +626,7 @@ def update_annotation(
             cls = []
             bbx = []
             for j in range(len(score[i])):
-                score_thresh = max(
-                    0.8, min(0.95, 1 - (epoch / (total_epochs * 5)))
-                )
+
                 if score[i][j] > score_thresh:
                     c = classes[i][j]
                     b = bbox[i][j]
@@ -637,6 +640,7 @@ def update_annotation(
                 key = "{}_{}".format(update_names[i], update_crop_ids[i])
                 pseudo_labels[key] = (new_anno.detach(), epoch)
     model.train()
+    return score_thresh
 
 
 def update_params(model, lr_inner, source_params=None):
@@ -661,10 +665,10 @@ def check_and_replace_with_pseudo(idxs, crop_ids, pseudo_labels, labels, parser,
             original = labels.data.shape
             if pseudo[0] > original[1]:
                 temp = torch.ones([parser.batch_size, pseudo[0], pseudo[1]]) * -1
-                temp[:, 0 : original[1], :] = labels.data
+                temp[:, 0: original[1], :] = labels.data
                 labels.data = temp.cuda()
             elif pseudo[0] < original[1]:
-                labels.data[i][0 : pseudo[0], :] = pseudo_labels[pseudo_label_id][
+                labels.data[i][0: pseudo[0], :] = pseudo_labels[pseudo_label_id][
                     0
                 ].cuda()
             else:
