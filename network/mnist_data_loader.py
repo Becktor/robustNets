@@ -26,6 +26,7 @@ class MNISTImbalanced:
         self.data_val = []
         self.labels = []
         self.labels_val = []
+        self.real_labels = []
 
         if mode == "train":
             data_source = self.mnist.data
@@ -45,6 +46,8 @@ class MNISTImbalanced:
             cl = torch.from_numpy(np.random.randint(9, size=len(tmp_idx[:n_class]))).type(
                 torch.LongTensor)
             self.labels.append(cl)
+            correct = label_source[tmp_idx[:n_class]].type(torch.LongTensor)
+            self.real_labels.append(correct)
 
             if mode == "train":
                 img_val = data_source[tmp_idx[n_class:n_class + n_val]]
@@ -60,9 +63,11 @@ class MNISTImbalanced:
             self.data.append(img_val)
             cl_val = label_source[tmp_idx[n_class + n_val:]].type(torch.LongTensor)
             self.labels.append(cl_val)
+            self.real_labels.append(cl_val)
 
         self.data = torch.cat(self.data, dim=0)
         self.labels = torch.cat(self.labels, dim=0)
+        self.real_labels = torch.cat(self.real_labels, dim=0)
 
         if mode == "train":
             self.data_val = torch.cat(self.data_val, dim=0)
@@ -80,7 +85,7 @@ class MNISTImbalanced:
         """
 
         img, target = self.data[index], self.labels[index]
-
+        rt = self.real_labels[index]
         # doing this so that it is consistent with all other datasets
         # to return a PIL Image
         img = Image.fromarray(img.numpy(), mode='L')
@@ -88,8 +93,7 @@ class MNISTImbalanced:
         if self.transform is not None:
             img = self.transform(img)
 
-        return img, target
-
+        return img, target, index, rt
 
 
 def get_mnist_loader(batch_size, classes=[9, 4], n_items=5000, proportion=0.9, n_val=5, mode='train'):
